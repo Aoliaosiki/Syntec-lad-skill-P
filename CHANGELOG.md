@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.3.1p - 2026-11-19
+
+### Added
+
+- `discover`：识别 MB / SB / package 三种备份的固定目录结构，自动定位
+  `.lad`、`paramext.pxt`、`ParamExt_*.xml`、`AlarmPLC_*.xml`、IO 表；
+  散装单文件直接给路径。结构说明见 `references/delivery-layout.md`。
+- `crosscheck`：一次做四项跨文件核对
+  1. 参数表 ↔ 梯图（pxt 有节但梯图零引用 / 文案与节不对应）；
+  2. 三语 ↔ 三语（生效文案差集，自动排除 XML 注释块）；
+  3. 报警位 ↔ 文案（梯图写出的 R44~R49 报警位、R590/R591 提示位）；
+  4. IO 表 ↔ 梯图（点位只在一侧存在）。
+  支持 `--delivery` 一键取齐所有输入。
+- `lint`：静态规则检查——重复线圈、`S` 当线圈写、同一 I/O 点被过多网络
+  复用、地址越界（A/C/S 511、TM/CT 255、R 65535）、注释含简体字。
+- `zhconv`：简繁转换（域内字符表），用于写注释前把简体转成 cp950 繁体。
+- `diff` 的 modified 条目新增 `operand_changes`：操作数级差异
+  （如 `OUT R0591.04 -> OUT R0590.04`），不再只有十六进制字节。
+- `lookup` 地址无命中时回落到知识库全文检索，并给出工艺词对应的参考文件；
+  繁体查询会先归一化为简体再检索。
+- MCP 新增 `lint_lad`、`crosscheck_lad` 两个工具。
+
+### Changed
+
+- 报警位缺文案按严重度区分：`R44~R49` 报 error，`R590/R591` 提示位报 warning。
+- IO 表解析兼容 `地址<TAB>描述` 文本与 `IoMap_*.xml` 端口映射表；后者解析不出
+  点位时只给提示，不刷警告。
+
+### Tests
+
+- 新增 `tests/test_diff.py`、`tests/test_lint.py`、`tests/test_crosscheck.py`、
+  `tests/test_zhconv.py`，用例总数 65 → 91。
+- 真实交付验证：`crosscheck --delivery <MB 备份>` 与 1028 天樱交付（3191 记录）
+  均能跑通，1028 交付结果为 error 0 / warning 5 / info 80。
+
 ## 0.3.0p - 2026-11-19
 
 首个公开预览版（Public Preview）。内容 = 0.2.2 的基础上合入全部 0.2.3 修复，

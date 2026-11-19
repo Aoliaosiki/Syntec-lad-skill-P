@@ -47,7 +47,7 @@ from .remap import (
     remap_variable_comments,
 )
 
-__version__ = "0.3.0p"
+__version__ = "0.3.1p"
 
 __all__ = [
     "CHANGE_SCHEMA",

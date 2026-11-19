@@ -1,6 +1,6 @@
 ---
 name: syntec-lad
-description: Inspect, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, ladder, I/O 点位表, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
+description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
 metadata:
   short-description: Edit, validate, and design Syntec .lad ladder logic safely
 ---
@@ -282,8 +282,12 @@ The full anti-pattern list is in
 python $LadCli inspect .\file.lad
 python $LadCli inspect .\file.lad --program 7        # one subprogram only
 python $LadCli inspect .\file.lad --network N0016    # one network candidate
+python $LadCli discover "D:\path\to\MB_or_SB_backup"  # where are the files?
+python $LadCli lint .\file.lad                       # static rule checks
+python $LadCli crosscheck --delivery "D:\path\to\backup"
 python $LadCli lookup C6
-python $LadCli lookup "M码"
+python $LadCli lookup "润滑"                          # falls back to the knowledge base
+python $LadCli zhconv "主轴润滑压力不足"              # simplified -> traditional
 python $LadCli build .\plan.json .\new.lad
 python $LadCli patch .\source.lad .\change.json .\patched.lad
 python $LadCli remap .\source.lad .\mapped.lad --mapping-file .\mapping.json --expected-sha256 <sha256>
@@ -293,7 +297,42 @@ python $LadCli open .\file.lad
 ```
 
 `lookup` searches the bundled 602-address C/S/R index by exact address or
-keyword. It does not replace `inspect` or a reviewed point table.
+keyword; when nothing matches it falls back to full-text search of
+`references/`, so工艺词（润滑、刀库、安全门）也能定位到章节。It does not replace
+`inspect` or a reviewed point table.
+
+## Delivery discovery
+
+A machine backup has a fixed shape: MB backups keep everything at the root
+(`Ladder/cnc.lad`, `ParameterExt/paramext.pxt`), while SB backups mirror the C
+drive (`DiskC/OpenCNC/Ladder/CNC.LAD`, `DiskC/OpenCNC/Res/paramext.pxt`,
+`DiskC/OCRes/<lang>/String/ParamExt_<lang>.Xml`). `discover` reports what a
+directory contains; `crosscheck --delivery` uses the same detection to fill in
+`--pxt`, `--param-xml`, `--alarm-xml` and `--io` automatically.
+
+When only a single `.lad` was copied out of the machine, pass the file path
+directly and give the companion files explicitly. See
+`references/delivery-layout.md` for the full path tables and the pitfalls
+(`IoMap_Customer.xml` is a port map, not a point table; `ParamExt_RBit_*.xml`
+is a different parameter set).
+
+## Cross-file checks
+
+`crosscheck` answers the four questions that otherwise need hand-written
+scripts for every delivery:
+
+1. **parameter ↔ ladder** — parameters that exist in `paramext.pxt` but are
+   never read by the ladder (or the reverse);
+2. **language ↔ language** — live `ParamExt_CHS/CHT/COM.xml` entry differences,
+   with commented-out entries excluded;
+3. **alarm bit ↔ text** — bits the ladder writes that have no `AlarmPLC_*.xml`
+   entry (R44~R49 are alarms, R590/R591 are hints);
+4. **IO table ↔ ladder** — points that only exist on one side.
+
+`lint` covers the anti-patterns that the parser cannot reject: duplicate
+coils, `S` used as a coil, one I/O point reused across many networks,
+out-of-range indices, and simplified-Chinese comments that would render as
+question marks under cp950.
 
 ## Knowledge routing
 
@@ -310,6 +349,7 @@ keyword. It does not replace `inspect` or a reviewed point table.
 | R512~R1023 permissions | `references/panming/R512-R1023-权限表.md` |
 | Full opcode/format appendix | `references/panming/TECHNICAL.md` |
 | Native plan/change workflow | `references/workflow.md` |
+| MB/SB/package 备份的固定目录结构 | `references/delivery-layout.md` |
 
 ## Native setup
 

@@ -1,9 +1,9 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.0p 优化版）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.1p 优化版）
 
 > ## 本仓库是原版的优化版
 >
 > **原版（上游）**：[`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2
-> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.0p
+> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.1p
 >
 > 相对原版的主要优化：
 >
@@ -50,26 +50,39 @@ PLC 位地址，并调用原厂 32 位 `LadDLL.dll` 做语法校验。Skill 同�
 - `patch`：用 `syntec-lad-change/v1` 对哈希锁定的记录范围做插入、替换、
   删除；过期哈希、跨网络边界和结构行会被拒绝。
 - `remap`：同时替换 I/O、C/S/A 位和 R 寄存器位，避免级联误替换。
-- `lookup`：查询内置 602 条 C/S/R 地址索引，支持地址精确查询和关键词搜索。
+- `lookup`：查询内置 602 条 C/S/R 地址索引；无命中时回落到参考文档全文检索
+  （「润滑」「刀库」这类工艺词也能定位到章节），繁体查询会先归一化为简体。
 - `validate`：Python 回读校验，并在可用时调用原厂 LadDLL 语法检查。
 - `diff`：按注释块 / 网络 / 结构记录做段对齐比较，输出未变、修改、新增、
-  删除、移动五类结果，带指令预览和 4 字节单元差异（不再按记录下标硬对齐）。
+  删除、移动五类结果；修改项给出**操作数级**差异
+  （`OUT R0591.04 -> OUT R0590.04`），而非只有十六进制字节。
+- `discover`：识别 MB / SB / package 三种备份的固定目录结构，自动报告
+  `.lad`、`paramext.pxt`、`ParamExt_*.xml`、`AlarmPLC_*.xml`、IO 表的位置。
+- `crosscheck`：跨文件四项核对——参数表 ↔ 梯图、三语 ↔ 三语、报警位 ↔ 文案、
+  IO 表 ↔ 梯图；支持 `--delivery` 一键取齐输入。
+- `lint`：静态规则检查——重复线圈、`S` 当线圈、同一 I/O 点被过多网络复用、
+  地址越界、注释含简体字（cp950 下会显示成问号）。
+- `zhconv`：简繁转换，写注释前把简体转成繁体。
 - `open`：仅启动 `MLCEdit.exe -f <file>` 供人工复核。
 
 ## 与原版（0.2.2）的差异
 
 本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill)
-的衍生版本，0.3.0p 在保留原有解析 / 生成 / 补丁 / 重映射内核和安全边界的前提下，
+的衍生版本，0.3.1p 在保留原有解析 / 生成 / 补丁 / 重映射内核和安全边界的前提下，
 做了四项针对性改动：
 
-| 项 | 原版 0.2.2 | 本版 0.3.0p |
+| 项 | 原版 0.2.2 | 本版 0.3.1p |
 | --- | --- | --- |
 | `diff` | 按记录下标硬对齐，插入一条记录后其后全部错位（实测两版真实 `cnc.lad` 报 2893 处差异） | 段对齐（`syntec-lad-diff/v2`），同样两版文件报「未变 1708 / 修改 5 / 新增 2」，带指令预览与单元差异 |
 | 原生校验 | 硬编码导出序号 `#124`，缺少该导出的 `LadDLL.dll` 会导致每次 `validate` 失败 | `#124` 改为可选，缺失时 `error_type=-1`，语法门禁正常运行 |
 | 测试 | 真实样本路径与若干记录号写死在作者机器上，换文件必挂 | 动态定位网络 / 结构记录，样本路径支持 `SYNTEC_LAD_SAMPLE` 环境变量 |
 | `inspect` | 只能全量输出（120 KB 文件约 11 MB JSON） | 新增 `--program` / `--network` 过滤，MCP `inspect_lad` 同步支持 |
+| 交付核对 | 无，参数表/报警文案/IO 表只能手工比对 | 新增 `crosscheck`（四项核对）与 `discover`（MB/SB/package 自动定位） |
+| 静态检查 | 无，SKILL.md 里的反模式只能靠人记 | 新增 `lint`（重复线圈、S 当线圈、I/O 复用、越界、简体注释） |
+| 中文检索 | 602 条地址索引按地址组织，工艺词搜不到 | `lookup` 无命中时回落知识库全文检索；新增 `zhconv` 简繁转换 |
 
-新增 `syntec_lad/lad_diff.py`；CLI、MCP 的接口与既有 JSON Schema 保持兼容。
+新增 `syntec_lad/lad_diff.py`、`crosscheck.py`、`lint.py`、`delivery.py`、
+`knowledge.py`、`zhconv.py`；CLI、MCP 的接口与既有 JSON Schema 保持兼容。
 
 ## 工程知识库
 
@@ -137,10 +150,10 @@ git clone https://github.com/Aoliaosiki/Syntec-lad-skill-P.git $target
 也可以下载 ZIP 解压，把文件夹命名为 `syntec-lad` 放入上述目录：
 
 - 直链：
-  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.0p.zip>
+  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.1p.zip>
 - jsDelivr 加速：
-  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.0p.zip>
-- SHA256：见 `downloads/syntec-lad-skill-0.3.0p.zip.sha256`
+  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.1p.zip>
+- SHA256：见 `downloads/syntec-lad-skill-0.3.1p.zip.sha256`
 
 Skill 自带启动器，不要求安装 Python 包：
 
@@ -200,8 +213,12 @@ python .\scripts\run_syntec_lad.py --help
 
 ```powershell
 python $LadCli inspect .\file.lad
+python $LadCli lint .\file.lad
+python $LadCli discover "D:\path\to\MB_backup"
+python $LadCli crosscheck --delivery "D:\path\to\MB_backup"
 python $LadCli lookup C6
 python $LadCli lookup "M码"
+python $LadCli zhconv "主轴润滑压力不足"
 python $LadCli build .\plan.json .\new.lad
 python $LadCli validate .\new.lad
 python $LadCli diff .\file.lad .\new.lad
@@ -324,6 +341,17 @@ python -m unittest discover -s tests -v
 **能直接改 CNC 或操作编辑器界面吗？**
 不能。本工具只处理本地 `.lad` 文件，不点击界面、不上传控制器。
 
+**手上只有一台机拷回来的整包备份，怎么最快核对？**
+先 `syntec-lad discover <备份目录>` 看工具认出了哪些文件，再
+`syntec-lad crosscheck --delivery <备份目录>` 一次跑完四项核对。
+MB 备份（`Ladder/` + `ParameterExt/`）和 SB 备份（`DiskC/OpenCNC/...`）都能自动识别；
+结构表见 `references/delivery-layout.md`。
+
+**lint 报了一堆 `duplicate_coil` / `io_reused`，都是错吗？**
+`duplicate_coil` 是错误级：同一地址被多个网络驱动，通常是真的写重了。
+`io_reused` 是警告级：同一个 I/O 点在多个网络里直接读写，Syntec 规范建议映射到
+`A300+n` / `A400+n` 后统一使用；现场老程序常见，可用 `--io-max-uses` 调阈值。
+
 ## 目录结构
 
 ```text
@@ -340,6 +368,7 @@ syntec_lad/                Python SDK、CLI 和 JSON Schema
 native/                    x86 LadDLL 校验辅助程序源码
 tools/lad_parser.py        独立的旧版解析/反汇编交叉检查器
 references/                原生工作流与工程知识库
+references/delivery-layout.md  MB/SB/package 备份的固定目录结构
 references/panming/        上游 MIT 知识快照（地址、模式、功能库）
 examples/                  格式示例与回归夹具
 tests/                     unittest 测试
@@ -361,4 +390,4 @@ tests/                     unittest 测试
 - 本工具仅用于对自有或已获授权设备的离线梯形图分析与生成；不点击编辑器
   界面、不上传 CNC、不修改控制器。
 
-版本：`0.3.0p`
+版本：`0.3.1p`

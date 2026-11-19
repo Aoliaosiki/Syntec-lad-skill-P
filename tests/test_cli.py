@@ -41,9 +41,13 @@ class CliTests(unittest.TestCase):
         report = json.loads(padded.stdout)
         self.assertEqual(report["hits"][0]["address"], "C6")
 
-        missing = run_cli("lookup", "R99999")
+        missing = run_cli("lookup", "R99999", "--addresses-only")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("no match", missing.stdout)
+
+        knowledge = run_cli("lookup", "润滑", "--limit", "3")
+        self.assertEqual(knowledge.returncode, 0, knowledge.stderr)
+        self.assertIn("knowledge-base", knowledge.stdout)
 
     def test_build_inspect_validate_diff_and_in_place(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

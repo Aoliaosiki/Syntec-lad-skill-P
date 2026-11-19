@@ -111,6 +111,56 @@ def _segments_for(document: LadDocument) -> list[_Segment]:
     return segments
 
 
+def _operand_changes(
+    left_records: list[bytes],
+    right_records: list[bytes],
+    encoding: str,
+) -> list[dict[str, Any]]:
+    """Symbol-level differences between paired rows of two networks."""
+
+    from .inspection import _decode_code_row
+
+    changes: list[dict[str, Any]] = []
+    count = min(len(left_records), len(right_records))
+    for index in range(count):
+        left_row = left_records[index]
+        right_row = right_records[index]
+        if left_row == right_row:
+            continue
+        left_cells = _decode_code_row(left_row, index, encoding)["cells"]
+        right_cells = _decode_code_row(right_row, index, encoding)["cells"]
+        for position in range(min(len(left_cells), len(right_cells))):
+            left_cell = left_cells[position]
+            right_cell = right_cells[position]
+            if left_cell["raw_hex"] == right_cell["raw_hex"]:
+                continue
+            left_text = f"{left_cell['mnemonic']} {left_cell['value']}".strip()
+            right_text = f"{right_cell['mnemonic']} {right_cell['value']}".strip()
+            same_opcode = left_cell["mnemonic"] == right_cell["mnemonic"]
+            changes.append(
+                {
+                    "record": index,
+                    "column": left_cell["column"],
+                    "kind": "operand" if same_opcode else "instruction",
+                    "left": left_text,
+                    "right": right_text,
+                    "left_raw": left_cell["raw_hex"],
+                    "right_raw": right_cell["raw_hex"],
+                }
+            )
+        if len(left_cells) != len(right_cells):
+            changes.append(
+                {
+                    "record": index,
+                    "column": min(len(left_cells), len(right_cells)),
+                    "kind": "layout",
+                    "left": f"{len(left_cells)} cells",
+                    "right": f"{len(right_cells)} cells",
+                }
+            )
+    return changes
+
+
 def _cells_changed(left_records: list[bytes], right_records: list[bytes]) -> list[dict[str, Any]]:
     changed: list[dict[str, Any]] = []
     count = min(len(left_records), len(right_records))
@@ -220,6 +270,9 @@ def diff_documents(
                         "status": "modified",
                         "left": _segment_payload(a),
                         "right": _segment_payload(b),
+                        "operand_changes": _operand_changes(
+                            left_records, right_records, left.encoding
+                        ),
                         "changed_cells": _cells_changed(left_records, right_records),
                     }
                 )
@@ -343,11 +396,26 @@ def render_diff(result: dict[str, Any], *, context: int = 8) -> str:
                 lines.append(f"    right: {preview_right}")
         else:
             lines.append(f"    {preview_left}")
-        for cell in entry.get("changed_cells", [])[:6]:
+        changes = entry.get("operand_changes")
+        if not changes:
+            changes = [
+                {**item, "kind": "cell"}
+                for item in entry.get("changed_cells", [])
+            ]
+        labels = {
+            "operand": "op  ",
+            "instruction": "ins ",
+            "layout": "lay ",
+            "cell": "cell",
+        }
+        for change in changes[:8]:
+            kind = labels.get(str(change.get("kind")), "cell")
             lines.append(
-                f"    cell r{cell['record']:04d} c{cell['column']}  "
-                f"{cell['left']} -> {cell['right']}"
+                f"    {kind} r{change['record']:04d} c{change['column']}: "
+                f"{change['left']} -> {change['right']}"
             )
+        if len(changes) > 8:
+            lines.append(f"    ... {len(changes) - 8} more cell changes")
     if result["truncated"]:
         lines.append("")
         lines.append(

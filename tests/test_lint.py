@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from syntec_lad.compiler import compile_plan
+from syntec_lad.errors import LadError
+from syntec_lad.lint import lint_document, render_lint
+from syntec_lad.model import LadDocument
+
+
+def _plan(networks: list[dict], *, encoding: str = "gb2312") -> dict:
+    return {
+        "schema": "syntec-lad-plan/v1",
+        "encoding": encoding,
+        "programs": [{"name": "MAIN", "networks": networks}],
+    }
+
+
+def _document(networks: list[dict]) -> LadDocument:
+    return compile_plan(_plan(networks))
+
+
+def _rules(result: dict) -> list[str]:
+    return [item["rule"] for item in result["issues"]]
+
+
+class LintTests(unittest.TestCase):
+    def test_clean_program_passes(self) -> None:
+        document = _document(
+            [
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "OUT", "operand": "O000"}],
+                }
+            ]
+        )
+        result = lint_document(document)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["summary"]["error"], 0)
+
+    def test_duplicate_coil_is_reported(self) -> None:
+        document = _document(
+            [
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "OUT", "operand": "O001"}],
+                },
+                {
+                    "condition": {"contact": "I002"},
+                    "actions": [{"op": "OUT", "operand": "O001"}],
+                },
+            ]
+        )
+        result = lint_document(document)
+        self.assertIn("duplicate_coil", _rules(result))
+        self.assertFalse(result["ok"])
+        self.assertTrue(
+            any("O001" in item["detail"] for item in result["issues"])
+        )
+
+    def test_s_used_as_coil_is_reported(self) -> None:
+        try:
+            document = _document(
+                [
+                    {
+                        "condition": {"contact": "I000"},
+                        "actions": [{"op": "OUT", "operand": "S010"}],
+                    }
+                ]
+            )
+        except LadError as exc:  # 编译器本身可能拒绝，属于更强的保护
+            self.skipTest(f"compiler rejects S coil: {exc}")
+        result = lint_document(document)
+        self.assertIn("s_as_coil", _rules(result))
+
+    def test_simplified_comment_is_reported(self) -> None:
+        document = _document(
+            [
+                {
+                    "comment": "主轴润滑压力不足",
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "OUT", "operand": "O000"}],
+                }
+            ]
+        )
+        result = lint_document(document)
+        self.assertIn("simplified_comment", _rules(result))
+
+    def test_render_output_mentions_rule_names(self) -> None:
+        document = _document(
+            [
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "OUT", "operand": "O001"}],
+                },
+                {
+                    "condition": {"contact": "I002"},
+                    "actions": [{"op": "OUT", "operand": "O001"}],
+                },
+            ]
+        )
+        text = render_lint(lint_document(document))
+        self.assertIn("duplicate_coil", text)
+        self.assertIn("FAIL", text)
+
+    def test_io_reuse_threshold(self) -> None:
+        networks = [
+            {
+                "condition": {"contact": "I005"},
+                "actions": [{"op": "OUT", "operand": f"O{index:03d}"}],
+            }
+            for index in range(3)
+        ]
+        document = _document(networks)
+        strict = lint_document(document, io_max_uses=2)
+        loose = lint_document(document, io_max_uses=9)
+        self.assertIn("io_reused", _rules(strict))
+        self.assertNotIn("io_reused", _rules(loose))
+
+    def test_real_sample_lints_without_crashing(self) -> None:
+        sample = Path(
+            r"D:\common\新代\C铣床学习\1028 天樱加工中心资料修改\1028修改\IO对比\cnc.lad"
+        )
+        if not sample.is_file():
+            self.skipTest("real cnc.lad sample is unavailable")
+        result = lint_document(LadDocument.load(sample))
+        self.assertGreater(result["source"]["networks"], 100)
+        self.assertEqual(
+            result["summary"]["error"] + result["summary"]["warning"],
+            len(result["issues"]),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

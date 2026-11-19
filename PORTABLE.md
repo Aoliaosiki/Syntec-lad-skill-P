@@ -52,12 +52,14 @@ server. See `mcp-config.example.json` and replace the path:
 
 The MCP tools are:
 
-- `inspect_lad`
+- `inspect_lad`（支持 `program` / `network` 过滤）
 - `lookup_address`
 - `build_plan`
 - `patch_lad`
 - `validate_lad`
-- `diff_lad`
+- `diff_lad`（段对齐 + 操作数级差异）
+- `lint_lad`（重复线圈 / S 当线圈 / I/O 复用 / 越界 / 简体注释）
+- `crosscheck_lad`（参数表、三语、报警位、IO 表四项核对；可用 `delivery` 自动定位）
 - `read_reference`
 - `list_references`
 - `explain_capabilities`
@@ -65,11 +67,12 @@ The MCP tools are:
 ## Agent Skills directories
 
 For an agent that reads the Agent Skills layout but does not use WorkBuddy,
-copy this whole directory into its skill directory. The default Codex location
-is:
+copy this whole directory into its skill directory. Typical locations:
 
 ```text
-~/.codex/skills/syntec-lad/
+~/.codebuddy/skills/syntec-lad/     (CodeBuddy)
+~/.codex/skills/syntec-lad/         (Codex)
+~/.workbuddy/skills/syntec-lad/     (WorkBuddy)
 ```
 
 The same folder can be used from any checkout:

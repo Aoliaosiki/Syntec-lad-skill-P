@@ -138,6 +138,48 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "lint_lad",
+        "description": (
+            "Static rule checks for a .lad: duplicate coils, S used as a coil, "
+            "reused I/O points, out-of-range indices, simplified-Chinese comments."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "lad": {"type": "string"},
+                "io_max_uses": {"type": "integer", "default": 5, "minimum": 1},
+            },
+            "required": ["lad"],
+        },
+    },
+    {
+        "name": "crosscheck_lad",
+        "description": (
+            "Cross-check a .lad against paramext.pxt, ParamExt_*.xml, "
+            "AlarmPLC_*.xml and an IO point table. Pass a backup directory via "
+            "delivery to locate all of them automatically."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "lad": {"type": "string", "description": "ladder path; optional with delivery"},
+                "delivery": {
+                    "type": "string",
+                    "description": "MB/SB/package backup directory to auto-discover files",
+                },
+                "pxt": {"type": "string"},
+                "param_xml": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "ParamExt_CHS/CHT/COM.xml; repeat to compare languages",
+                },
+                "alarm_xml": {"type": "string"},
+                "io": {"type": "string", "description": "IO point table (address<TAB>description)"},
+                "context": {"type": "integer", "default": 12, "minimum": 1},
+            },
+        },
+    },
+    {
         "name": "read_reference",
         "description": (
             "Read a bundled knowledge reference by relative path, for example "
@@ -256,6 +298,32 @@ def _tool_diff(args: dict[str, Any]) -> dict[str, Any]:
     return _run_cli(command, fail_on_error=False)
 
 
+def _tool_lint(args: dict[str, Any]) -> dict[str, Any]:
+    command = ["lint", str(args["lad"]), "--json"]
+    if args.get("io_max_uses"):
+        command += ["--io-max-uses", str(int(args["io_max_uses"]))]
+    return _run_cli(command, fail_on_error=False)
+
+
+def _tool_crosscheck(args: dict[str, Any]) -> dict[str, Any]:
+    command = ["crosscheck", "--json"]
+    if args.get("lad"):
+        command.append(str(args["lad"]))
+    if args.get("delivery"):
+        command += ["--delivery", str(args["delivery"])]
+    if args.get("pxt"):
+        command += ["--pxt", str(args["pxt"])]
+    for item in args.get("param_xml") or []:
+        command += ["--param-xml", str(item)]
+    if args.get("alarm_xml"):
+        command += ["--alarm-xml", str(args["alarm_xml"])]
+    if args.get("io"):
+        command += ["--io", str(args["io"])]
+    if args.get("context"):
+        command += ["--context", str(int(args["context"]))]
+    return _run_cli(command, fail_on_error=False)
+
+
 def _resolve_reference(name: str) -> Path:
     root = REFERENCE_ROOT.resolve()
     candidate = (root / name).resolve()
@@ -315,6 +383,8 @@ TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "patch_lad": _tool_patch,
     "validate_lad": _tool_validate,
     "diff_lad": _tool_diff,
+    "lint_lad": _tool_lint,
+    "crosscheck_lad": _tool_crosscheck,
     "read_reference": _tool_read_reference,
     "list_references": _tool_list_references,
     "explain_capabilities": _tool_explain,
@@ -338,7 +408,7 @@ def _dispatch(method: str, params: dict[str, Any]) -> Any:
         return {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "syntec-lad", "version": "0.3.0p"},
+            "serverInfo": {"name": "syntec-lad", "version": "0.3.1p"},
         }
     if method == "ping":
         return {}
