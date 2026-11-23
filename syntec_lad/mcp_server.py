@@ -431,7 +431,7 @@ def _dispatch(method: str, params: dict[str, Any]) -> Any:
         return {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "syntec-lad", "version": "0.3.4p"},
+            "serverInfo": {"name": "syntec-lad", "version": "0.3.5p"},
         }
     if method == "ping":
         return {}

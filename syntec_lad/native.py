@@ -26,6 +26,8 @@ DEFAULT_CHECKER = PROJECT_ROOT / "native" / "bin" / "LadSyntaxCheck.exe"
 
 DEFAULT_DLL_CANDIDATES = (
     Path(r"D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll"),
+    Path(r"C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll"),
+    Path(r"C:\Program Files\SYNTEC\MacroDev\Bin\LadDLL.dll"),
     PROJECT_ROOT / "native" / "LadDLL.dll",
     PROJECT_ROOT / "native" / "bin" / "LadDLL.dll",
 )

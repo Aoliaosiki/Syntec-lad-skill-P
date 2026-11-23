@@ -1,9 +1,9 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.4p 优化版）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.5p 优化版）
 
 > ## 本仓库是原版的优化版
 >
 > **原版（上游）**：[`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2
-> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.4p
+> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.5p
 >
 > 相对原版的主要优化：
 >
@@ -74,10 +74,10 @@ PLC 位地址，并调用原厂 32 位 `LadDLL.dll` 做语法校验。Skill 同�
 ## 与原版（0.2.2）的差异
 
 本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill)
- 的衍生版本，0.3.4p 在保留原有解析 / 生成 / 补丁 / 重映射内核和安全边界的前提下，
+ 的衍生版本，0.3.5p 在保留原有解析 / 生成 / 补丁 / 重映射内核和安全边界的前提下，
 做了四项针对性改动：
 
-| 项 | 原版 0.2.2 | 本版 0.3.4p |
+| 项 | 原版 0.2.2 | 本版 0.3.5p |
 | --- | --- | --- |
 | `diff` | 按记录下标硬对齐，插入一条记录后其后全部错位（实测两版真实 `cnc.lad` 报 2893 处差异） | 段对齐（`syntec-lad-diff/v2`），同样两版文件报「未变 1708 / 修改 5 / 新增 2」，带指令预览与单元差异 |
 | 原生校验 | 硬编码导出序号 `#124`，缺少该导出的 `LadDLL.dll` 会导致每次 `validate` 失败 | `#124` 改为可选，缺失时 `error_type=-1`，语法门禁正常运行 |
@@ -128,7 +128,11 @@ MCP 适配器和 WorkBuddy 安装器按本项目接口自行实现，没有复�
 - 原厂校验：32 位 `LadDLL.dll`、.NET Framework 4.x、可用的 `csc.exe`。
 - 人工复核：`MLCEdit.exe`。
 
-如果 LadEditor 不在默认位置，先设置：
+会自动尝试常见安装位置，包括
+`C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`、
+`C:\Program Files\SYNTEC\MacroDev\Bin\LadDLL.dll` 和
+`D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll`。如果仍不在这些位置，
+再设置：
 
 ```powershell
 $env:SYNTEC_LAD_DLL = 'C:\path\to\LadEditor\LadDLL.dll'
@@ -156,10 +160,10 @@ git clone https://github.com/Aoliaosiki/Syntec-lad-skill-P.git $target
 也可以下载 ZIP 解压，把文件夹命名为 `syntec-lad` 放入上述目录：
 
 - 直链：
-  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.4p.zip>
+  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.5p.zip>
 - jsDelivr 加速：
-  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.4p.zip>
-- SHA256：见 `downloads/syntec-lad-skill-0.3.4p.zip.sha256`
+  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.5p.zip>
+- SHA256：见 `downloads/syntec-lad-skill-0.3.5p.zip.sha256`
 
 Skill 自带启动器，不要求安装 Python 包：
 
@@ -362,8 +366,9 @@ python -m unittest discover -s tests -v
 ## 常见问题
 
 **`validate` 提示原生校验无法运行？**
-设置 `SYNTEC_LAD_DLL` 指向 32 位 `LadDLL.dll`。本版已兼容缺少导出序号
-`#124` 的 DLL 版本（原版会直接失败）。没有 DLL 时 `inspect` / `diff` /
+先用 `--dll` 或 `SYNTEC_LAD_DLL` 指向 32 位 `LadDLL.dll`；本版也会自动
+尝试 `Program Files (x86)\SYNTEC\MacroDev\Bin` 等常见位置。已兼容缺少导出
+序号 `#124` 的 DLL 版本（原版会直接失败）。没有 DLL 时 `inspect` / `diff` /
 `build` / `patch` 仍可正常使用，只是跳过原生语法门。
 
 **中文注释显示成乱码？**
@@ -430,4 +435,4 @@ tests/                     unittest 测试
 - 本工具仅用于对自有或已获授权设备的离线梯形图分析与生成；不点击编辑器
   界面、不上传 CNC、不修改控制器。
 
-版本：`0.3.4p`
+版本：`0.3.5p`

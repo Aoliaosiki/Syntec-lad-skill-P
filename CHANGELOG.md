@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.5p - 2026-11-23
+
+### Fixed
+
+- 原生校验自动发现新增标准安装路径
+  `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`（以及 64 位
+  `Program Files` 对应路径）。本机无需再手动设置 `SYNTEC_LAD_DLL`。
+
+### Verified
+
+- 本机 `LadDLL.dll`（2014-05-30，49152 字节）原生校验通过：
+  `examples/demo.lad`、`examples/mvp.lad` 均为 `native: PASS error_count=0`。
+- 新混合动作布局 `TIM+OUT` 与 9 触点双线圈布局均通过原生语法检查。
+- 完整测试 118 项通过，11 项跳过（缺少真实样本/编辑器，不再因 DLL 缺失跳过）。
+
 ## 0.3.4p - 2026-11-23
 
 ### Added
