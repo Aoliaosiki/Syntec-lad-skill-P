@@ -380,7 +380,10 @@ question marks under cp950.
 
 ## Native setup
 
-Set these when LadEditor is not in a known location:
+The SDK first checks standard C-drive install paths and bundled native folders.
+If they are absent, it performs a bounded search on other local fixed drives
+for `LadDLL.dll` / `MLCEdit.exe` and caches discovered paths under
+`%LOCALAPPDATA%\syntec-lad\`. Set these only to force a specific installation:
 
 ```powershell
 $env:SYNTEC_LAD_DLL = 'C:\path\to\LadEditor\LadDLL.dll'

@@ -13,17 +13,17 @@ from syntec_lad.opcodes import STRUCTURAL_OPCODES
 from syntec_lad.patch import CHANGE_SCHEMA, apply_change_plan
 
 
-SAMPLE = Path(
-    os.environ.get(
-        "SYNTEC_LAD_SAMPLE",
-        r"D:\Toolsyntec\pakeageTool\快速打包工具\DiskC\OpenCNC\Ladder\cnc.lad",
-    )
+SAMPLE_ENV = os.environ.get("SYNTEC_LAD_SAMPLE") or os.environ.get("SYNTEC_SAMPLE_LAD")
+SAMPLE = Path(SAMPLE_ENV) if SAMPLE_ENV else None
+
+
+@unittest.skipUnless(
+    SAMPLE is not None and SAMPLE.is_file(),
+    "real cnc.lad sample is unavailable",
 )
-
-
-@unittest.skipUnless(SAMPLE.exists(), "real cnc.lad sample is unavailable")
 class PatchTests(unittest.TestCase):
     def setUp(self) -> None:
+        assert SAMPLE is not None
         self.document = LadDocument.load(SAMPLE)
         self.inspection = inspect_document(self.document)
 

@@ -1,6 +1,6 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.5p）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.6p）
 
-[![Version](https://img.shields.io/badge/version-0.3.5p-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.6p-blue)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-green)](pyproject.toml)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](README.md)
 
@@ -14,13 +14,13 @@
   12 个工艺模式，以及润滑/液压/排屑/刀库/M 码写法库。
 
 > **本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2 的优化版。**
-> 当前版本：`0.3.5p`，仓库：
+> 当前版本：`0.3.6p`，仓库：
 > [`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P)。
 > 本工具不会点击 LadEditor 界面，不会上传 CNC，也不会直接修改控制器。
 
 ## 目录
 
-- [0.3.5p 重点](#035p-重点)
+- [0.3.6p 重点](#036p-重点)
 - [功能总览](#功能总览)
 - [安全边界](#安全边界)
 - [环境要求与原生校验](#环境要求与原生校验)
@@ -38,7 +38,7 @@
 - [目录结构](#目录结构)
 - [版本与授权](#版本与授权)
 
-## 0.3.5p 重点
+## 0.3.6p 重点
 
 ### 同条件多输出真正合并
 
@@ -74,20 +74,25 @@
 
 ### 原生 DLL 自动发现
 
-0.3.5p 会自动尝试本机常见安装位置，包括：
+`0.3.6p` 先检查固定安装位置和 skill 自带目录：
 
 ```text
-D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
 C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll
 C:\Program Files\SYNTEC\MacroDev\Bin\LadDLL.dll
-D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
+C:\Program Files (x86)\SYNTEC\LadEditor\LadDLL.dll
+C:\Program Files\SYNTEC\LadEditor\LadDLL.dll
 <skill>\native\LadDLL.dll
 <skill>\native\bin\LadDLL.dll
 ```
 
-本机实测 `D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll`
-（LadEditor 2.37.0）和 `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`
-（旧版 MacroDev）都能直接通过原生校验，不再需要手动设置 `SYNTEC_LAD_DLL`。
+固定位置都找不到时，才搜索 C 盘以外的本地固定盘（例如 D/E）。搜索只查找
+`LadDLL.dll` 和 `MLCEdit.exe`，优先进入 `SYNTEC`、`LadEditor`、`MacroDev`
+等目录，并限制搜索深度和目录数量；Windows、回收站、`node_modules`、
+虚拟环境和缓存目录会跳过。成功路径缓存到
+`%LOCALAPPDATA%\syntec-lad\native-discovery.json`，后续命令直接复用。
+
+因此安装路径可以因电脑而异，不需要把某个人的 D 盘目录写死。本机实测
+MacroDev 2014 版和 LadEditor 2.37.0 的 2025 版 DLL 都能通过原生校验。
 
 ## 功能总览
 
@@ -133,18 +138,22 @@ D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
 
 ### 自动查找 LadDLL
 
-默认依次尝试：
+默认先尝试固定 C 盘安装位置和 skill 自带目录：
 
 ```text
-D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
-D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
 C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll
 C:\Program Files\SYNTEC\MacroDev\Bin\LadDLL.dll
+C:\Program Files (x86)\SYNTEC\LadEditor\LadDLL.dll
+C:\Program Files\SYNTEC\LadEditor\LadDLL.dll
 <skill>\native\LadDLL.dll
 <skill>\native\bin\LadDLL.dll
 ```
 
-仍找不到时，显式指定：
+固定位置不存在时，会自动搜索其它本地固定盘。搜索有深度和目录数量上限，
+会优先匹配 `SYNTEC` / `LadEditor` / `MacroDev` 目录名，并跳过系统目录、
+依赖目录和缓存目录。找到后会写入用户缓存，后续不再重复扫描。
+
+如果需要固定使用某一版 DLL，仍可显式指定：
 
 ```powershell
 $env:SYNTEC_LAD_DLL = 'C:\path\to\LadEditor\LadDLL.dll'
@@ -178,13 +187,10 @@ native  : PASS  error_count=0
 
 ### 方式一：下载分发包
 
-- GitHub Release：
-  <https://github.com/Aoliaosiki/Syntec-lad-skill-P/releases/download/v0.3.5p/syntec-lad-skill-0.3.5p.zip>
-- raw 直链：
-  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.5p.zip>
-- jsDelivr 加速：
-  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.5p.zip>
-- SHA256：见 `downloads/syntec-lad-skill-0.3.5p.zip.sha256`
+- 最新 GitHub Release：
+  <https://github.com/Aoliaosiki/Syntec-lad-skill-P/releases/latest>
+- 仓库内分发包：`downloads/syntec-lad-skill-0.3.6p.zip`
+- SHA256：见 `downloads/syntec-lad-skill-0.3.6p.zip.sha256`
 
 解压后把文件夹命名为 `syntec-lad`，放到对应 Agent 的 skills 目录。
 
@@ -918,15 +924,15 @@ python -m unittest discover -s tests -v
 
 当前结果：
 
-- `118` 项测试通过，`11` 项跳过（缺少真实样本/编辑器）。
-- 本机 `D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll`
-  （2025 版）和 `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`
-  （2014 版）均可用。
+- `122` 项测试通过，`12` 项跳过（缺少真实样本/编辑器）。
+- 本机 LadEditor 2.37.0（2025 版）和
+  `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`（2014 版）
+  均可用。
 - `examples/demo.lad`：`native: PASS error_count=0`。
 - `examples/mvp.lad`：`native: PASS error_count=0`。
 - 混合 `TIM+OUT` 同条件布局：`native: PASS error_count=0`。
 - 9 触点条件驱动双线圈：`native: PASS error_count=0`。
-- `MLCEdit.exe` 实测路径：`D:\common\Syntec\LadEditor_2.37.0\LadEditor\MLCEdit.exe`。
+- `LadDLL.dll` 和 `MLCEdit.exe` 的自定义盘符安装目录可由兜底搜索自动定位。
 
 真实样本测试可指定：
 
@@ -942,10 +948,9 @@ python -m unittest discover -s tests -v
 
 先用 `--dll` 或 `SYNTEC_LAD_DLL` 指向 32 位 `LadDLL.dll`；本版会自动尝试
 `Program Files (x86)\SYNTEC\MacroDev\Bin`、`Program Files\SYNTEC\MacroDev\Bin`
-、`D:\common\Syntec\LadEditor_2.37.0\LadEditor` 和
-`D:\Toolsyntec\LadEditor_2.37.0\LadEditor`。已兼容缺少导出序号 `#124`
-的 DLL。没有 DLL 时 `build` / `patch` / `remap` 会失败；只能加
-`--no-native` 做解析级诊断，不能声称原生语法通过。
+等固定位置；仍找不到时会搜索其它本地固定盘中的 `LadDLL.dll`。已兼容缺少
+导出序号 `#124` 的 DLL。没有 DLL 时 `build` / `patch` / `remap` 会失败；
+只能加 `--no-native` 做解析级诊断，不能声称原生语法通过。
 
 **中文注释显示成乱码？**
 
@@ -1025,4 +1030,4 @@ downloads/                     版本分发包与 SHA256
 - 本工具仅用于对自有或已获授权设备的离线梯形图分析与生成；不点击编辑器
   界面、不上传 CNC、不修改控制器。
 
-当前版本：`0.3.5p`。完整变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本：`0.3.6p`。完整变更见 [CHANGELOG.md](CHANGELOG.md)。

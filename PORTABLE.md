@@ -88,8 +88,10 @@ python .\scripts\run_syntec_lad.py lookup C6
 
 Knowledge lookup, parsing, plan generation, patch preparation, and diffing work
 without LadEditor. Final native validation still requires Windows, a 32-bit
-`LadDLL.dll`, and .NET Framework 4.x (`csc.exe`). Do not describe a file as
-fully validated if only the Python readback ran.
+`LadDLL.dll`, and .NET Framework 4.x (`csc.exe`). Standard C-drive paths are
+checked first; missing installations are located with a bounded search on
+other local fixed drives. Do not describe a file as fully validated if only
+the Python readback ran.
 
 The MCP server never clicks the editor and never uploads to a CNC. `open` is
 not exposed as an MCP tool; human review remains an explicit CLI action.

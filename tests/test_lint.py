@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -192,11 +193,13 @@ class LintTests(unittest.TestCase):
         self.assertNotIn("io_reused", _rules(loose))
 
     def test_real_sample_lints_without_crashing(self) -> None:
-        sample = Path(
-            r"D:\common\新代\C铣床学习\1028 天樱加工中心资料修改\1028修改\IO对比\cnc.lad"
+        sample_env = os.environ.get("SYNTEC_SAMPLE_LAD") or os.environ.get(
+            "SYNTEC_LAD_SAMPLE"
         )
-        if not sample.is_file():
+        sample = Path(sample_env) if sample_env else None
+        if sample is None or not sample.is_file():
             self.skipTest("real cnc.lad sample is unavailable")
+        assert sample is not None
         result = lint_document(LadDocument.load(sample))
         self.assertGreater(result["source"]["networks"], 100)
         self.assertEqual(

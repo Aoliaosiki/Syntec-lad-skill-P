@@ -1,22 +1,36 @@
 # Changelog
 
+## 0.3.6p - 2026-11-23
+
+### Changed
+
+- 原生 DLL 自动发现不再写死个人 D 盘安装目录。固定 C 盘标准路径和
+  skill 自带目录优先；找不到时才搜索其它本地固定盘。
+- 兜底搜索只查找 `LadDLL.dll` / `MLCEdit.exe`，优先进入
+  `SYNTEC`、`LadEditor`、`MacroDev` 等目录，并限制搜索深度和目录数量。
+  搜索会跳过 Windows、回收站、`node_modules`、虚拟环境、缓存等目录。
+- 成功发现的路径写入
+  `%LOCALAPPDATA%\syntec-lad\native-discovery.json`，后续命令直接复用。
+- README、CHANGELOG 和测试中的个人 D 盘路径已移除。
+
+### Tests
+
+- 新增自定义盘符布局搜索、固定路径优先、依赖目录跳过和个人路径检查测试。
+
 ## 0.3.5p - 2026-11-23
 
 ### Fixed
 
-- 原生校验自动发现新增标准安装路径
-  `D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll`、
-  `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`（以及 64 位
-  `Program Files` 对应路径）和 `MLCEdit.exe` 对应安装目录。本机无需再
-  手动设置 `SYNTEC_LAD_DLL` / `SYNTEC_LAD_EDITOR`。
+- 原生校验自动发现新增 MacroDev 标准安装路径（32/64 位
+  `Program Files`）以及本机 LadEditor 2.37.0 安装目录，无需再手动设置
+  `SYNTEC_LAD_DLL` / `SYNTEC_LAD_EDITOR`。
 
 ### Verified
 
 - 本机 `LadDLL.dll`（2014-05-30，49152 字节）原生校验通过：
   `examples/demo.lad`、`examples/mvp.lad` 均为 `native: PASS error_count=0`。
 - 本机 LadEditor 2.37.0 的 `LadDLL.dll`（2025-08-27，303104 字节）同样
-  通过；`MLCEdit.exe` 位于
-  `D:\common\Syntec\LadEditor_2.37.0\LadEditor\MLCEdit.exe`。
+  通过，`MLCEdit.exe` 也可用。
 - 新混合动作布局 `TIM+OUT` 与 9 触点双线圈布局均通过原生语法检查。
 - 完整测试 118 项通过，11 项跳过（缺少真实样本/编辑器，不再因 DLL 缺失跳过）。
 
