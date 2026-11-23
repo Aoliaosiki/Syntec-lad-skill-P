@@ -5,13 +5,18 @@
 ### Fixed
 
 - 原生校验自动发现新增标准安装路径
+  `D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll`、
   `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`（以及 64 位
-  `Program Files` 对应路径）。本机无需再手动设置 `SYNTEC_LAD_DLL`。
+  `Program Files` 对应路径）和 `MLCEdit.exe` 对应安装目录。本机无需再
+  手动设置 `SYNTEC_LAD_DLL` / `SYNTEC_LAD_EDITOR`。
 
 ### Verified
 
 - 本机 `LadDLL.dll`（2014-05-30，49152 字节）原生校验通过：
   `examples/demo.lad`、`examples/mvp.lad` 均为 `native: PASS error_count=0`。
+- 本机 LadEditor 2.37.0 的 `LadDLL.dll`（2025-08-27，303104 字节）同样
+  通过；`MLCEdit.exe` 位于
+  `D:\common\Syntec\LadEditor_2.37.0\LadEditor\MLCEdit.exe`。
 - 新混合动作布局 `TIM+OUT` 与 9 触点双线圈布局均通过原生语法检查。
 - 完整测试 118 项通过，11 项跳过（缺少真实样本/编辑器，不再因 DLL 缺失跳过）。
 

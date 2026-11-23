@@ -77,6 +77,7 @@
 0.3.5p 会自动尝试本机常见安装位置，包括：
 
 ```text
+D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
 C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll
 C:\Program Files\SYNTEC\MacroDev\Bin\LadDLL.dll
 D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
@@ -84,8 +85,9 @@ D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
 <skill>\native\bin\LadDLL.dll
 ```
 
-本机实测 `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`
-可直接通过原生校验，不再需要手动设置 `SYNTEC_LAD_DLL`。
+本机实测 `D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll`
+（LadEditor 2.37.0）和 `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`
+（旧版 MacroDev）都能直接通过原生校验，不再需要手动设置 `SYNTEC_LAD_DLL`。
 
 ## 功能总览
 
@@ -134,6 +136,7 @@ D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
 默认依次尝试：
 
 ```text
+D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
 D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll
 C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll
 C:\Program Files\SYNTEC\MacroDev\Bin\LadDLL.dll
@@ -916,11 +919,14 @@ python -m unittest discover -s tests -v
 当前结果：
 
 - `118` 项测试通过，`11` 项跳过（缺少真实样本/编辑器）。
-- 本机 `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll` 可用。
+- 本机 `D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll`
+  （2025 版）和 `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`
+  （2014 版）均可用。
 - `examples/demo.lad`：`native: PASS error_count=0`。
 - `examples/mvp.lad`：`native: PASS error_count=0`。
 - 混合 `TIM+OUT` 同条件布局：`native: PASS error_count=0`。
 - 9 触点条件驱动双线圈：`native: PASS error_count=0`。
+- `MLCEdit.exe` 实测路径：`D:\common\Syntec\LadEditor_2.37.0\LadEditor\MLCEdit.exe`。
 
 真实样本测试可指定：
 
@@ -936,7 +942,8 @@ python -m unittest discover -s tests -v
 
 先用 `--dll` 或 `SYNTEC_LAD_DLL` 指向 32 位 `LadDLL.dll`；本版会自动尝试
 `Program Files (x86)\SYNTEC\MacroDev\Bin`、`Program Files\SYNTEC\MacroDev\Bin`
-和 `D:\Toolsyntec\LadEditor_2.37.0\LadEditor`。已兼容缺少导出序号 `#124`
+、`D:\common\Syntec\LadEditor_2.37.0\LadEditor` 和
+`D:\Toolsyntec\LadEditor_2.37.0\LadEditor`。已兼容缺少导出序号 `#124`
 的 DLL。没有 DLL 时 `build` / `patch` / `remap` 会失败；只能加
 `--no-native` 做解析级诊断，不能声称原生语法通过。
 

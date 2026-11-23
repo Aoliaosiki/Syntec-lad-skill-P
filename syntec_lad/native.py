@@ -25,6 +25,7 @@ CHECKER_SOURCE = PROJECT_ROOT / "native" / "LadSyntaxCheck.cs"
 DEFAULT_CHECKER = PROJECT_ROOT / "native" / "bin" / "LadSyntaxCheck.exe"
 
 DEFAULT_DLL_CANDIDATES = (
+    Path(r"D:\common\Syntec\LadEditor_2.37.0\LadEditor\LadDLL.dll"),
     Path(r"D:\Toolsyntec\LadEditor_2.37.0\LadEditor\LadDLL.dll"),
     Path(r"C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll"),
     Path(r"C:\Program Files\SYNTEC\MacroDev\Bin\LadDLL.dll"),
@@ -33,7 +34,10 @@ DEFAULT_DLL_CANDIDATES = (
 )
 
 DEFAULT_EDITOR_CANDIDATES = (
+    Path(r"D:\common\Syntec\LadEditor_2.37.0\LadEditor\MLCEdit.exe"),
     Path(r"D:\Toolsyntec\LadEditor_2.37.0\LadEditor\MLCEdit.exe"),
+    Path(r"C:\Program Files (x86)\SYNTEC\LadEditor\MLCEdit.exe"),
+    Path(r"C:\Program Files\SYNTEC\LadEditor\MLCEdit.exe"),
     PROJECT_ROOT / "MLCEdit.exe",
 )
 
