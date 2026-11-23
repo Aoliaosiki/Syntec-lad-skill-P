@@ -58,7 +58,8 @@ The MCP tools are:
 - `patch_lad`
 - `validate_lad`
 - `diff_lad`（段对齐 + 操作数级差异）
-- `lint_lad`（重复线圈 / S 当线圈 / I/O 复用 / 越界 / 简体注释）
+- `lint_lad`（重复线圈 / S 当线圈 / I/O 复用 / 越界 / 简体注释 / 可合并条件）
+- `lint_plan`（生成前 DNF 合并审计 / 动作母线宽度 / 流程动作）
 - `crosscheck_lad`（参数表、三语、报警位、IO 表四项核对；可用 `delivery` 自动定位）
 - `read_reference`
 - `list_references`
