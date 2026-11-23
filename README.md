@@ -1,9 +1,9 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.1p 优化版）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.2p 优化版）
 
 > ## 本仓库是原版的优化版
 >
 > **原版（上游）**：[`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2
-> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.1p
+> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.2p
 >
 > 相对原版的主要优化：
 >
@@ -11,6 +11,7 @@
 > 2. **修复原生 LadDLL 校验**——原版硬编码导出序号 `#124`，部分 `LadDLL.dll` 缺该导出会导致每次 `validate` 失败；
 > 3. **测试可移植**——原版样本路径与记录号写死在作者机器上；
 > 4. **`inspect` 支持 `--program` / `--network` 范围过滤**——原版只能全量输出。
+> 5. **生成器支持公共条件自动合并**——串联里的多个并联组共用母线，公共前缀/后缀不再逐行重复（`layout: auto`）。
 >
 > 详细对照见 [与原版（0.2.2）的差异](#与原版022的差异)，逐条记录见 [CHANGELOG.md](CHANGELOG.md)。
 > 上游项目本体未声明 LICENSE，`references/panming/` 知识快照为 MIT，商用/再分发前请与上游作者确认。
@@ -46,7 +47,8 @@ PLC 位地址，并调用原厂 32 位 `LadDLL.dll` 做语法校验。Skill 同�
 
 - `inspect`：查看编码、SHA256、程序边界、物理记录、注释和网络候选。
 - `build`：从 `syntec-lad-plan/v1` 生成主程序、普通子程序、触点、线圈、
-  定时器、计数器、比较、数据传送和跳转/调用。
+  定时器、计数器、比较、数据传送和跳转/调用；复合条件会自动因式分解，
+  公共前缀/后缀只写一次，可用 `layout: expanded` 回退旧布局。
 - `patch`：用 `syntec-lad-change/v1` 对哈希锁定的记录范围做插入、替换、
   删除；过期哈希、跨网络边界和结构行会被拒绝。
 - `remap`：同时替换 I/O、C/S/A 位和 R 寄存器位，避免级联误替换。
@@ -150,10 +152,10 @@ git clone https://github.com/Aoliaosiki/Syntec-lad-skill-P.git $target
 也可以下载 ZIP 解压，把文件夹命名为 `syntec-lad` 放入上述目录：
 
 - 直链：
-  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.1p.zip>
+  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.2p.zip>
 - jsDelivr 加速：
-  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.1p.zip>
-- SHA256：见 `downloads/syntec-lad-skill-0.3.1p.zip.sha256`
+  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.2p.zip>
+- SHA256：见 `downloads/syntec-lad-skill-0.3.2p.zip.sha256`
 
 Skill 自带启动器，不要求安装 Python 包：
 
