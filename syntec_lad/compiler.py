@@ -62,6 +62,15 @@ class Leaf:
         )
 
 
+@dataclass(frozen=True)
+class ConditionNode:
+    """A condition tree that keeps ``all``/``any`` nesting for layout."""
+
+    kind: str
+    leaf: Leaf | None = None
+    children: tuple["ConditionNode", ...] = ()
+
+
 @dataclass
 class Action:
     op: str
@@ -149,9 +158,9 @@ class RowLayout:
         return bytes(row)
 
 
-def _normalize_condition(condition: Any) -> list[list[Leaf]]:
+def _parse_condition_node(condition: Any) -> ConditionNode:
     if condition is None:
-        return [[]]
+        return ConditionNode("true")
     if not isinstance(condition, dict):
         raise LadValidationError("network condition must be an object")
     allowed_keys = {"all", "any", "contact", "compare", "always"}
@@ -174,23 +183,22 @@ def _normalize_condition(condition: Any) -> list[list[Leaf]]:
         values = condition["all"]
         if not isinstance(values, list):
             raise LadValidationError("condition.all must be an array")
-        if not values:
-            return [[]]
-        result: list[list[Leaf]] = [[]]
-        for value in values:
-            child = _normalize_condition(value)
-            result = [left + right for left in result for right in child]
-        return _limit_dnf(result)
+        children = tuple(
+            node
+            for node in (_parse_condition_node(value) for value in values)
+            if node.kind != "true"
+        )
+        if not children:
+            return ConditionNode("true")
+        return ConditionNode("all", children=children)
     if "any" in condition:
         values = condition["any"]
         if not isinstance(values, list) or not values:
             raise LadValidationError("condition.any must be a non-empty array")
-        result: list[list[Leaf]] = []
-        for value in values:
-            result.extend(_normalize_condition(value))
-        if any(not term for term in result):
-            return [[]]
-        return _limit_dnf(result)
+        children = tuple(_parse_condition_node(value) for value in values)
+        if any(node.kind == "true" for node in children):
+            return ConditionNode("true")
+        return ConditionNode("any", children=children)
     if "contact" in condition:
         device = str(condition["contact"])
         normally = str(condition.get("normally", "open")).lower()
@@ -200,7 +208,10 @@ def _normalize_condition(condition: Any) -> list[list[Leaf]]:
             )
         contact_kind, operand = parse_contact_device(device)
         opcode = CONTACT_OPCODES[(contact_kind, normally)]
-        return [[Leaf("contact", opcode, 1, operand, None, source=device.upper())]]
+        return ConditionNode(
+            "leaf",
+            leaf=Leaf("contact", opcode, 1, operand, None, source=device.upper()),
+        )
     if "compare" in condition:
         compare = condition["compare"]
         if not isinstance(compare, dict):
@@ -228,14 +239,45 @@ def _normalize_condition(condition: Any) -> list[list[Leaf]]:
         raw_opcode = COMPARE_OPCODES[
             (relation, "const" if other.kind == "const" else "register")
         ]
-        return [[Leaf("compare", raw_opcode, 2, other, value, source=relation)]]
+        return ConditionNode(
+            "leaf",
+            leaf=Leaf("compare", raw_opcode, 2, other, value, source=relation),
+        )
     if "always" in condition:
         if not condition["always"]:
             raise LadValidationError("condition.always must be true when used")
-        return [[]]
+        return ConditionNode("true")
     raise LadValidationError(
         "condition must contain all, any, contact, compare, or always"
     )
+
+
+def _condition_dnf(node: ConditionNode) -> list[list[Leaf]]:
+    if node.kind == "true":
+        return [[]]
+    if node.kind == "leaf":
+        if node.leaf is None:
+            raise LadValidationError("leaf condition is missing its contact")
+        return [[node.leaf]]
+    if node.kind == "all":
+        result: list[list[Leaf]] = [[]]
+        for child in node.children:
+            child_terms = _condition_dnf(child)
+            result = [left + right for left in result for right in child_terms]
+            result = _limit_dnf(result)
+        return result
+    if node.kind == "any":
+        result: list[list[Leaf]] = []
+        for child in node.children:
+            result.extend(_condition_dnf(child))
+        if any(not term for term in result):
+            return [[]]
+        return _limit_dnf(result)
+    raise LadValidationError(f"unknown condition node: {node.kind}")
+
+
+def _normalize_condition(condition: Any) -> list[list[Leaf]]:
+    return _condition_dnf(_parse_condition_node(condition))
 
 
 def _limit_dnf(terms: list[list[Leaf]]) -> list[list[Leaf]]:
@@ -470,6 +512,169 @@ def _factor_terms(terms: list[list[Leaf]]) -> list[list[list[Leaf]]] | None:
     return elements
 
 
+@dataclass
+class _ConditionLayout:
+    height: int
+    width: int
+    leaves: list[tuple[int, int, Leaf]]
+    lines: list[tuple[int, int]]
+    buses: list[tuple[int, int, int]]
+
+
+def _layout_condition_node(node: ConditionNode) -> _ConditionLayout:
+    """Lay out the condition tree directly, preserving nested all/any blocks.
+
+    Every ``any`` node gets a vertical bus at its left and right edges.  An
+    ``all`` node simply places its children left to right and top aligned; the
+    buses owned by a child ``any`` merge that child's rows at exactly the
+    column where the next series element begins.
+    """
+
+    if node.kind == "true":
+        return _ConditionLayout(1, 0, [], [], [])
+    if node.kind == "leaf":
+        if node.leaf is None:
+            raise LadValidationError("leaf condition is missing its contact")
+        return _ConditionLayout(1, node.leaf.width, [(0, 0, node.leaf)], [], [])
+    if node.kind == "all":
+        if not node.children:
+            return _ConditionLayout(1, 0, [], [], [])
+        children = [_layout_condition_node(child) for child in node.children]
+        height = max(child.height for child in children)
+        width = sum(child.width for child in children)
+        leaves: list[tuple[int, int, Leaf]] = []
+        lines: list[tuple[int, int]] = []
+        buses: list[tuple[int, int, int]] = []
+        column = 0
+        for child in children:
+            leaves.extend(
+                (row, column + child_column, leaf)
+                for row, child_column, leaf in child.leaves
+            )
+            lines.extend(
+                (row, column + child_column)
+                for row, child_column in child.lines
+            )
+            buses.extend(
+                (child_column + column, top, bottom)
+                for child_column, top, bottom in child.buses
+            )
+            column += child.width
+        return _ConditionLayout(height, width, leaves, lines, buses)
+    if node.kind == "any":
+        if not node.children:
+            raise LadValidationError("condition.any must be a non-empty array")
+        children = [_layout_condition_node(child) for child in node.children]
+        width = max(child.width for child in children)
+        height = sum(child.height for child in children)
+        leaves: list[tuple[int, int, Leaf]] = []
+        lines: list[tuple[int, int]] = []
+        buses: list[tuple[int, int, int]] = []
+        row_offset = 0
+        for child in children:
+            leaves.extend(
+                (row + row_offset, child_column, leaf)
+                for row, child_column, leaf in child.leaves
+            )
+            lines.extend(
+                (row + row_offset, child_column)
+                for row, child_column in child.lines
+            )
+            # A branch only needs to reach the common right bus on its first
+            # row.  Lower rows either end at an inner merge bus (already
+            # connected to the first row) or are pass-through rows that must
+            # not be given a conducting path.
+            lines.extend(
+                (row_offset, child_column)
+                for child_column in range(child.width, width)
+            )
+            buses.extend(
+                (child_column, top + row_offset, bottom + row_offset)
+                for child_column, top, bottom in child.buses
+            )
+            row_offset += child.height
+        if height > 1:
+            buses.append((0, 0, height - 1))
+            buses.append((width, 0, height - 1))
+        return _ConditionLayout(height, width, leaves, lines, buses)
+    raise LadValidationError(f"unknown condition node: {node.kind}")
+
+
+def _apply_bus(
+    layouts: list[RowLayout],
+    column: int,
+    top_row: int,
+    bottom_row: int,
+) -> None:
+    """Draw one vertical bus, anchoring both sides of every row it crosses."""
+
+    if top_row >= bottom_row:
+        return
+    if column <= 0:
+        # Column zero is the power rail; parallel branches already meet there.
+        return
+    if column >= 10:
+        raise LadUnsupportedError(f"cannot place a bus at column {column}")
+    if top_row < 0 or bottom_row >= len(layouts):
+        raise LadUnsupportedError("bus extends outside the network rows")
+    for row in range(top_row, bottom_row + 1):
+        layout = layouts[row]
+        left = layout.unit_ending_at(column)
+        if left is None:
+            if layout.occupied[column - 1]:
+                raise LadUnsupportedError(
+                    f"cannot place the bus at column {column} on row {row}"
+                )
+            left = layout.place(column - 1, make_nop_cell(), "NOP")
+        left.right_flags(
+            0x02 if row == top_row else 0x01 if row == bottom_row else 0x03
+        )
+
+        right = layout.unit_starting_at(column)
+        if right is None:
+            if layout.occupied[column]:
+                raise LadUnsupportedError(
+                    f"cannot place the bus at column {column} on row {row}"
+                )
+            right = layout.place(column, make_nop_cell(), "NOP")
+        right.left_flags(
+            0x08 if row == top_row else 0x04 if row == bottom_row else 0x0C
+        )
+
+
+def _compile_tree_rows(
+    node: ConditionNode,
+    action: Action,
+    *,
+    encoding: str,
+) -> list[bytes]:
+    """Lay out a condition tree with one bus per ``any`` edge."""
+
+    layout = _layout_condition_node(node)
+    action_start = action.action_slot
+    if layout.width > action_start:
+        raise LadUnsupportedError(
+            f"network needs {layout.width} columns but action starts at column {action_start}"
+        )
+    if layout.height > 64:
+        raise LadUnsupportedError("condition layout needs more than 64 rows")
+
+    layouts = [RowLayout() for _ in range(layout.height)]
+    for row, column, leaf in layout.leaves:
+        layouts[row].place(column, _make_leaf_unit(leaf, encoding), leaf.kind)
+    for row, column in layout.lines:
+        layouts[row].place(column, make_line_cell(), "LINE")
+
+    top = layouts[0]
+    top.fill_lines(layout.width, action_start - 1)
+    top.place(action_start, _make_action_unit(action, encoding), "ACTION")
+
+    for column, top_row, bottom_row in layout.buses:
+        _apply_bus(layouts, column, top_row, bottom_row)
+
+    return [row.render() for row in layouts]
+
+
 def _compile_factored_rows(
     elements: list[list[list[Leaf]]],
     action: Action,
@@ -649,7 +854,8 @@ def _compile_network_rows(
     encoding: str,
     layout: str = "auto",
 ) -> list[bytes]:
-    terms = _normalize_condition(network.get("condition"))
+    condition = _parse_condition_node(network.get("condition"))
+    terms = _condition_dnf(condition)
     actions_raw = network.get("actions")
     if not isinstance(actions_raw, list) or not actions_raw:
         raise LadValidationError("each network requires at least one action")
@@ -657,20 +863,28 @@ def _compile_network_rows(
     layout_mode = str(network.get("layout", layout)).lower()
     if layout_mode not in ("auto", "expanded"):
         raise LadValidationError("layout must be 'auto' or 'expanded'")
-    elements = _factor_terms(terms) if layout_mode == "auto" else None
 
     # A network in the plan means one conditional network.  If several actions
     # are supplied, emit one ladder row per action with the same condition.
     #
-    # ``auto`` factors a Cartesian-product DNF into a series of parallel
-    # groups, so a common left-hand condition is written once instead of being
-    # repeated on every expanded term.  ``expanded`` keeps the older one-row-
-    # per-term layout.  Both modes are electrically equivalent; the factored
-    # form is shorter and matches what a human would draw in LadEditor.
+    # ``auto`` first lays out the original all/any tree.  This keeps nested
+    # parallel blocks compact even when their DNF is not a Cartesian product.
+    # If the tree cannot fit, it falls back to Cartesian-product factoring and
+    # finally to the one-row-per-DNF-term layout.  ``expanded`` always uses the
+    # last form.
     all_rows: list[bytes] = []
     for action in actions:
         if action.width == 2 and action.action_slot != 8:
             raise LadUnsupportedError("two-cell actions must start at column 8")
+        if layout_mode == "auto":
+            try:
+                all_rows.extend(_compile_tree_rows(condition, action, encoding=encoding))
+                continue
+            except LadUnsupportedError:
+                pass
+            elements = _factor_terms(terms)
+        else:
+            elements = None
         if elements is not None:
             try:
                 all_rows.extend(

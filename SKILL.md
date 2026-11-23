@@ -123,10 +123,13 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    - Existing file: `syntec-lad-change/v1` with `base_sha256` and the exact
      `expected_sha256` of every target record range.
    - Leave `layout` at `auto` unless the user asks for the old expanded form.
-     `auto` factors a Cartesian-product `all`/`any` condition into a series of
-     parallel groups, so a shared prefix/suffix is written once. `expanded`
-     keeps one DNF term per row. Both modes are logically equivalent and must
-     pass the same validation gates.
+     `auto` lays out the original `all`/`any` tree directly: `all` places its
+     children in series and top-aligned, while every `any` gets a vertical bus
+     on its left and right edges. Nested parallel blocks therefore share their
+     prefix/suffix instead of repeating it, and an outer OR with nested 2×2
+     groups can stay compact (the A43 tool-change network is 3 rows, not 5).
+     `expanded` keeps one DNF term per row. Both modes are logically
+     equivalent and must pass the same validation gates.
 
 6. **Generate a new output by default.**
 

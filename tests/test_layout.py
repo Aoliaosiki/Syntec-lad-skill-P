@@ -251,6 +251,101 @@ class LayoutSemanticsTests(unittest.TestCase):
         self.assertEqual(set(bottom), {"A013", "R0075.00"})
         self.assert_equivalent(condition)
 
+    def test_nested_parallel_tool_change_network(self) -> None:
+        condition = {
+            "all": [
+                {
+                    "any": [
+                        {
+                            "all": [
+                                {"contact": "A040"},
+                                {
+                                    "any": [
+                                        {"contact": "A012"},
+                                        {"contact": "A013"},
+                                    ]
+                                },
+                                {
+                                    "any": [
+                                        {"contact": "S069"},
+                                        {"contact": "R0075.00"},
+                                    ]
+                                },
+                                {"contact": "A031", "normally": "closed"},
+                            ]
+                        },
+                        {
+                            "all": [
+                                {"contact": "A043"},
+                                {"contact": "A044", "normally": "closed"},
+                            ]
+                        },
+                    ]
+                },
+                {"contact": "A051"},
+                {"contact": "R0044.05", "normally": "closed"},
+            ]
+        }
+        document = compile_plan(plan_for(condition))
+        rows = code_rows(document)
+        self.assertEqual(len(rows), 3)
+
+        def contacts(row: dict) -> list[str]:
+            return [
+                str(cell["value"])
+                for cell in row["cells"]
+                if cell["mnemonic"] in ("LD", "LDI")
+            ]
+
+        self.assertEqual(contacts(rows[0]).count("A040"), 1)
+        self.assertNotIn("A040", contacts(rows[1]))
+        self.assertEqual(contacts(rows[1]), ["A013", "R0075.00"])
+        self.assertEqual(contacts(rows[2]), ["A043", "A044"])
+        self.assert_equivalent(condition)
+
+    def test_nested_parallel_expanded_opt_out(self) -> None:
+        condition = {
+            "all": [
+                {
+                    "any": [
+                        {
+                            "all": [
+                                {"contact": "A040"},
+                                {
+                                    "any": [
+                                        {"contact": "A012"},
+                                        {"contact": "A013"},
+                                    ]
+                                },
+                                {
+                                    "any": [
+                                        {"contact": "S069"},
+                                        {"contact": "R0075.00"},
+                                    ]
+                                },
+                                {"contact": "A031", "normally": "closed"},
+                            ]
+                        },
+                        {
+                            "all": [
+                                {"contact": "A043"},
+                                {"contact": "A044", "normally": "closed"},
+                            ]
+                        },
+                    ]
+                },
+                {"contact": "A051"},
+                {"contact": "R0044.05", "normally": "closed"},
+            ]
+        }
+        document = compile_plan(plan_for(condition, layout="expanded"))
+        self.assertEqual(len(code_rows(document)), 5)
+        try:
+            find_lad_dll()
+        except Exception as exc:
+            self.skipTest(f"native LadDLL unavailable: {exc}")
+        validate_document(document)
+
     def test_expanded_layout_opt_out(self) -> None:
         condition = {
             "all": [

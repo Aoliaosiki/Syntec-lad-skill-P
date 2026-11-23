@@ -1,9 +1,9 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.2p 优化版）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.3p 优化版）
 
 > ## 本仓库是原版的优化版
 >
 > **原版（上游）**：[`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2
-> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.2p
+> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.3p
 >
 > 相对原版的主要优化：
 >
@@ -11,7 +11,7 @@
 > 2. **修复原生 LadDLL 校验**——原版硬编码导出序号 `#124`，部分 `LadDLL.dll` 缺该导出会导致每次 `validate` 失败；
 > 3. **测试可移植**——原版样本路径与记录号写死在作者机器上；
 > 4. **`inspect` 支持 `--program` / `--network` 范围过滤**——原版只能全量输出。
-> 5. **生成器支持公共条件自动合并**——串联里的多个并联组共用母线，公共前缀/后缀不再逐行重复（`layout: auto`）。
+> 5. **生成器按 `all`/`any` 树直接排布**——嵌套并联块共用母线，公共前缀/后缀不再逐行重复；外层 OR、内层 2×2 并联和尾部串联可以写成紧凑的 3 行（`layout: auto`）。
 >
 > 详细对照见 [与原版（0.2.2）的差异](#与原版022的差异)，逐条记录见 [CHANGELOG.md](CHANGELOG.md)。
 > 上游项目本体未声明 LICENSE，`references/panming/` 知识快照为 MIT，商用/再分发前请与上游作者确认。
@@ -47,8 +47,8 @@ PLC 位地址，并调用原厂 32 位 `LadDLL.dll` 做语法校验。Skill 同�
 
 - `inspect`：查看编码、SHA256、程序边界、物理记录、注释和网络候选。
 - `build`：从 `syntec-lad-plan/v1` 生成主程序、普通子程序、触点、线圈、
-  定时器、计数器、比较、数据传送和跳转/调用；复合条件会自动因式分解，
-  公共前缀/后缀只写一次，可用 `layout: expanded` 回退旧布局。
+  定时器、计数器、比较、数据传送和跳转/调用；复合条件按 `all`/`any` 树
+  直接排布，公共前缀/后缀只写一次，可用 `layout: expanded` 回退旧布局。
 - `patch`：用 `syntec-lad-change/v1` 对哈希锁定的记录范围做插入、替换、
   删除；过期哈希、跨网络边界和结构行会被拒绝。
 - `remap`：同时替换 I/O、C/S/A 位和 R 寄存器位，避免级联误替换。
@@ -70,10 +70,10 @@ PLC 位地址，并调用原厂 32 位 `LadDLL.dll` 做语法校验。Skill 同�
 ## 与原版（0.2.2）的差异
 
 本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill)
-的衍生版本，0.3.2p 在保留原有解析 / 生成 / 补丁 / 重映射内核和安全边界的前提下，
+的衍生版本，0.3.3p 在保留原有解析 / 生成 / 补丁 / 重映射内核和安全边界的前提下，
 做了四项针对性改动：
 
-| 项 | 原版 0.2.2 | 本版 0.3.2p |
+| 项 | 原版 0.2.2 | 本版 0.3.3p |
 | --- | --- | --- |
 | `diff` | 按记录下标硬对齐，插入一条记录后其后全部错位（实测两版真实 `cnc.lad` 报 2893 处差异） | 段对齐（`syntec-lad-diff/v2`），同样两版文件报「未变 1708 / 修改 5 / 新增 2」，带指令预览与单元差异 |
 | 原生校验 | 硬编码导出序号 `#124`，缺少该导出的 `LadDLL.dll` 会导致每次 `validate` 失败 | `#124` 改为可选，缺失时 `error_type=-1`，语法门禁正常运行 |
@@ -152,10 +152,10 @@ git clone https://github.com/Aoliaosiki/Syntec-lad-skill-P.git $target
 也可以下载 ZIP 解压，把文件夹命名为 `syntec-lad` 放入上述目录：
 
 - 直链：
-  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.2p.zip>
+  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.3p.zip>
 - jsDelivr 加速：
-  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.2p.zip>
-- SHA256：见 `downloads/syntec-lad-skill-0.3.2p.zip.sha256`
+  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.3p.zip>
+- SHA256：见 `downloads/syntec-lad-skill-0.3.3p.zip.sha256`
 
 Skill 自带启动器，不要求安装 Python 包：
 
@@ -272,14 +272,18 @@ python $LadCli patch .\source.lad .\change.json .\patched.lad
 `layout` 可以写在计划顶层或单个 network 上，取值为 `auto`（默认）或
 `expanded`：
 
-- `auto`：当条件展开后的 DNF 恰好是各位置选择的笛卡尔积时，自动因式分解为
-  “串联 + 并联组”。公共前缀/后缀只写一次。例如
-  `A040 ∧ (A012∨A013) ∧ (S069∨R075.00) ∧ A031 ∧ A051 ∧ R044.05`
-  会生成 2 行，而不是把 `A040/A031/A051/R044.05` 在 4 行里重复。
+- `auto`：直接按原始 `all`/`any` 树排布。`all` 从左到右串联，`any` 上下
+  并联并在左右画母线；嵌套并联块共用公共前缀/后缀，尾部串联只写一次。
+  例如 `A040 ∧ (A012∨A013) ∧ (S069∨R075.00) ∧ A031 ∧ A051 ∧ R044.05`
+  生成 2 行，而不是把公共条件在 4 行里重复。
+- `auto` 对“外层 OR + 内层并联”同样有效。例如
+  `(A040 ∧ (A012∨A013) ∧ (S069∨R075.00) ∧ ¬A031) ∨ (A043 ∧ ¬A044)`，
+  再串联 `A051 ∧ ¬R044.05`，生成 3 行：第一支路占 2 行，第二支路占 1 行，
+  `A043/¬A044` 从下方并入 `A051` 前的母线。
 - `expanded`：沿用 0.3.1 的“一个 DNF 项一行”布局，便于对照或回退。
 
-两种模式逻辑等价，`build` 都会执行 Python 回读和 LadDLL 原生校验。不能
-安全因式分解的条件会自动回落到 `expanded`。
+两种模式逻辑等价，`build` 都会执行 Python 回读和 LadDLL 原生校验。`auto`
+的回落顺序是树形布局 → 笛卡尔积因式分解 → `expanded`。
 
 ### Change 示例
 
@@ -406,4 +410,4 @@ tests/                     unittest 测试
 - 本工具仅用于对自有或已获授权设备的离线梯形图分析与生成；不点击编辑器
   界面、不上传 CNC、不修改控制器。
 
-版本：`0.3.2p`
+版本：`0.3.3p`
