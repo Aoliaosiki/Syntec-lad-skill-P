@@ -181,8 +181,8 @@ class CliTests(unittest.TestCase):
             self.assertIn("parser readback: PASS", remapped.stdout)
             self.assertTrue(output.is_file())
             report = json.loads(report_path.read_text(encoding="utf-8"))
-            self.assertEqual(report["changed_operands"], 6)
-            self.assertEqual(report["changed_records"], 5)
+            self.assertEqual(report["changed_operands"], 5)
+            self.assertEqual(report["changed_records"], 4)
             self.assertEqual(report["unmatched_sources"], [])
 
             inspected = run_cli("inspect", output, "--json")

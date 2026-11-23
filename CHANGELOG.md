@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.2p - 2026-11-23
+
+### Added
+
+- 编译器新增 `auto` 布局：当 DNF 恰好是各位置选择的笛卡尔积时，自动因式
+  分解为“串联 + 并联组”，公共前缀和后缀只写一次。例如
+  `A040 ∧ (A012∨A013) ∧ (S069∨R075.00) ∧ A031 ∧ A051 ∧ R044.05`
+  以前会展开成 4 行、每行重复 `A040/A031/A051/R044.05`；现在为 2 行。
+- 支持一段串联中出现多个并联组。每个母线边界按 MLCEdit 的原生格式在两侧
+  同时写 RD/RU 与 LD/LU 标志；不同高度的并联组、2 槽比较分支、行尾并联
+  组都能布局。
+- 计划级和网络级 `layout` 字段：`auto`（默认）或 `expanded`（0.3.1 的
+  一项一行布局）。不能安全因式分解时自动回落到 `expanded`。
+- `tests/test_layout.py`：把编译后的行解析成梯形图图结构，对条件做真值表
+  等价检查，并保留原生 LadDLL 校验。
+
+### Changed
+
+- `examples/demo.lad`、`examples/mvp.lad` 更新为因式分解后的布局，逻辑
+  不变。
+- `test_cli.test_remap_workflow` 的 `changed_operands` / `changed_records`
+  期望值随公共条件不再重复而从 6/5 调整为 5/4。
+- `syntec_lad/schema/lad-plan.schema.json` 接受 `layout` 字段。
+
+### Tests
+
+- 用例总数 91 → 98；`unittest discover` 全通过（原生 DLL 可用时）。
+
 ## 0.3.1p - 2026-11-19
 
 ### Added

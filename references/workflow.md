@@ -69,6 +69,16 @@ python .\tools\lad_parser.py .\source.lad --no-write
 字母或数字。每个 network 必须包含 `actions`，可选 `condition` 和
 `comment`。
 
+`layout` 可写在计划顶层或 network 上：
+
+- `auto`（默认）：DNF 是各位置选择的笛卡尔积时，因式分解为“串联 + 并联组”，
+  公共前缀/后缀只写一次。例如
+  `A040 ∧ (A012∨A013) ∧ (S069∨R075.00) ∧ A031 ∧ A051 ∧ R044.05`
+  生成 2 行，而不是展开成 4 行重复公共条件。
+- `expanded`：0.3.1 的“一个 DNF 项一行”布局，用于对照或回退。
+
+两种模式逻辑等价；不能安全因式分解时自动回落到 `expanded`。
+
 支持的条件形态：
 
 - `{"contact": "I000"}`：常开触点

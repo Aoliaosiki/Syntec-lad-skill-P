@@ -14,6 +14,10 @@
       "type": "string",
       "enum": ["gb2312", "gb18030", "big5"]
     },
+    "layout": {
+      "enum": ["auto", "expanded"],
+      "default": "auto"
+    },
     "variables": {
       "type": "array",
       "items": {
@@ -78,6 +82,10 @@
         },
         "condition": {
           "$ref": "#/$defs/condition"
+        },
+        "layout": {
+          "enum": ["auto", "expanded"],
+          "default": "auto"
         },
         "actions": {
           "type": "array",

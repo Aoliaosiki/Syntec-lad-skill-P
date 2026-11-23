@@ -122,6 +122,11 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    - New file: `syntec-lad-plan/v1`
    - Existing file: `syntec-lad-change/v1` with `base_sha256` and the exact
      `expected_sha256` of every target record range.
+   - Leave `layout` at `auto` unless the user asks for the old expanded form.
+     `auto` factors a Cartesian-product `all`/`any` condition into a series of
+     parallel groups, so a shared prefix/suffix is written once. `expanded`
+     keeps one DNF term per row. Both modes are logically equivalent and must
+     pass the same validation gates.
 
 6. **Generate a new output by default.**
 
