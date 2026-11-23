@@ -206,6 +206,27 @@ def _cmd_lint(args: argparse.Namespace) -> int:
     return 0 if result["ok"] else 1
 
 
+def _cmd_plan_lint(args: argparse.Namespace) -> int:
+    from .plan_lint import lint_plan, render_plan_lint
+
+    path = Path(args.plan)
+    result = lint_plan(_json_load(path), source_path=path.resolve())
+    output = Path(args.output) if args.output else None
+    if args.json:
+        _write_json(output, result)
+    else:
+        text = render_plan_lint(
+            result,
+            limit=None if args.limit <= 0 else args.limit,
+        )
+        if output is None:
+            sys.stdout.write(text)
+        else:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(text, encoding="utf-8")
+    return 0 if result["ok"] else 1
+
+
 def _cmd_crosscheck(args: argparse.Namespace) -> int:
     from .crosscheck import crosscheck, render_crosscheck
     from .delivery import resolve_inputs
@@ -553,7 +574,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="syntec-lad",
         description="Read, generate, patch, and validate Syntec MLCEdit .lad files.",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.3.3p")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.3.4p")
     sub = parser.add_subparsers(dest="command", required=True)
 
     lookup = sub.add_parser(
@@ -585,6 +606,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="warn when one I/O point is used in this many networks (default 5)",
     )
     lint.set_defaults(func=_cmd_lint)
+
+    plan_lint = sub.add_parser(
+        "plan-lint",
+        help="audit a plan for equivalent adjacent conditions and mixed action widths",
+    )
+    plan_lint.add_argument("plan")
+    plan_lint.add_argument("--json", action="store_true", help="emit JSON")
+    plan_lint.add_argument("--output", help="write the report to this file")
+    plan_lint.add_argument(
+        "--limit",
+        type=int,
+        default=40,
+        help="max issues to print (0 = all)",
+    )
+    plan_lint.set_defaults(func=_cmd_plan_lint)
 
     cross = sub.add_parser(
         "crosscheck",

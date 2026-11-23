@@ -19,6 +19,28 @@ LINT_SCHEMA = "syntec-lad-lint/v1"
 
 COIL_MNEMONICS = {"OUT", "SET", "RST", "PLS", "PLF"}
 CONTACT_MNEMONICS = {"LD", "LDI", "LDT", "LDTI", "LDP", "LDF"}
+CONDITION_MNEMONICS = CONTACT_MNEMONICS | {"CMPG", "CMPL", "CMPE"}
+ACTION_MNEMONICS = COIL_MNEMONICS | {
+    "OUTI",
+    "TIM",
+    "CNTUP",
+    "CNTDOWN",
+    "CNTRESET",
+    "CNTRINGUP",
+    "CNTRINGDOWN",
+    "ADD",
+    "SUB",
+    "MUL",
+    "DIV",
+    "AND",
+    "OR",
+    "XOR",
+    "MOV",
+    "JMP",
+    "JSR",
+    "MSG",
+}
+FLOW_ACTION_MNEMONICS = {"JMP", "JSR", "MSG"}
 
 _ADDR_RE = re.compile(r"^(@?)(I|O|A|C|S|R|TM|CT)(\d+)(?:\.(\d+))?$")
 
@@ -121,6 +143,130 @@ def lint_document(
 
             if family in {"I", "O"}:
                 io_uses.setdefault(target.upper(), []).append(where)
+
+    def condition_signature(candidate: dict[str, Any]) -> tuple[Any, ...]:
+        signature: list[Any] = []
+        start = candidate["record_start"]
+        for record in range(start, candidate["record_end"] + 1):
+            row = rows_by_record.get(record)
+            if row is None or row["kind"] != "code":
+                continue
+            for cell in row["cells"]:
+                if cell["mnemonic"] not in CONDITION_MNEMONICS:
+                    continue
+                value = cell.get("value")
+                operands = (
+                    (str(value),)
+                    if value not in (None, "")
+                    else tuple(
+                        str(item.get("value"))
+                        for item in (cell.get("operands") or [])
+                    )
+                )
+                signature.append(
+                    (
+                        record - start,
+                        cell["column"],
+                        cell["mnemonic"],
+                        operands,
+                        cell.get("connection", 0),
+                    )
+                )
+        return tuple(signature)
+
+    candidates = inspection["network_candidates"]
+    candidate_widths: dict[str, set[int]] = {}
+    candidate_condition_end: dict[str, int] = {}
+    candidate_action_start: dict[str, int] = {}
+    candidate_flow_action: dict[str, bool] = {}
+    for candidate in candidates:
+        widths: set[int] = set()
+        condition_end = 0
+        action_start = 10
+        has_flow = False
+        for record in range(candidate["record_start"], candidate["record_end"] + 1):
+            row = rows_by_record.get(record)
+            if row is None or row["kind"] != "code":
+                continue
+            for cell in row["cells"]:
+                cell_end = int(cell["column"]) + int(cell["size"]) // 4
+                if cell["mnemonic"] in CONDITION_MNEMONICS:
+                    condition_end = max(condition_end, cell_end)
+                if cell["mnemonic"] in ACTION_MNEMONICS:
+                    widths.add(int(cell["size"]) // 4)
+                    action_start = min(action_start, int(cell["column"]))
+                    if cell["mnemonic"] in FLOW_ACTION_MNEMONICS:
+                        has_flow = True
+        candidate_widths[candidate["id"]] = widths
+        candidate_condition_end[candidate["id"]] = condition_end
+        candidate_action_start[candidate["id"]] = action_start
+        candidate_flow_action[candidate["id"]] = has_flow
+
+    for previous, current in zip(candidates, candidates[1:]):
+        if previous.get("program") != current.get("program"):
+            continue
+        signature = condition_signature(previous)
+        if signature != condition_signature(current):
+            continue
+        previous_widths = candidate_widths.get(previous["id"], set())
+        current_widths = candidate_widths.get(current["id"], set())
+        if not previous_widths or not current_widths:
+            continue
+        extra = {"networks": [previous["id"], current["id"]]}
+        if (
+            candidate_flow_action.get(previous["id"])
+            or candidate_flow_action.get(current["id"])
+        ):
+            issues.append(
+                _issue(
+                    "flow_action_not_mergeable",
+                    "info",
+                    f"{previous['id']} 与 {current['id']} 条件相同，但包含 "
+                    "JMP/JSR/MSG；流程指令不能与其它动作共用动作母线，"
+                    "保持独立 network",
+                    network=current["id"],
+                    program=current.get("program"),
+                    record=current["record_start"],
+                    extra=extra,
+                )
+            )
+            continue
+        shared_action_start = min(
+            candidate_action_start.get(previous["id"], 10),
+            candidate_action_start.get(current["id"], 10),
+        )
+        widest_condition = max(
+            candidate_condition_end.get(previous["id"], 0),
+            candidate_condition_end.get(current["id"], 0),
+        )
+        if widest_condition <= shared_action_start:
+            issues.append(
+                _issue(
+                    "mergeable_condition",
+                    "warning",
+                    f"{previous['id']} 与 {current['id']} 条件完全相同；"
+                    "合并到同一 network 的 actions 数组后只画一次条件",
+                    network=current["id"],
+                    program=current.get("program"),
+                    record=current["record_start"],
+                    extra=extra,
+                )
+            )
+        else:
+            issues.append(
+                _issue(
+                    "mergeable_condition_too_wide",
+                    "info",
+                    f"{previous['id']} 与 {current['id']} 条件相同，但条件宽 "
+                    f"{widest_condition} 列，超过共用动作母线的第 "
+                    f"{shared_action_start} 列；合并后仍会重复条件。保持两个 "
+                    "network，或缩短串联条件",
+                    network=current["id"],
+                    program=current.get("program"),
+                    record=current["record_start"],
+                    extra=extra,
+                )
+            )
 
     for address, owners in sorted(coil_owners.items()):
         networks = {item["network"] for item in owners}

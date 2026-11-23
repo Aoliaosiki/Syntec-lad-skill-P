@@ -1,9 +1,9 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.3p 优化版）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.4p 优化版）
 
 > ## 本仓库是原版的优化版
 >
 > **原版（上游）**：[`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2
-> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.3p
+> **本仓库**：[`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P) v0.3.4p
 >
 > 相对原版的主要优化：
 >
@@ -12,6 +12,7 @@
 > 3. **测试可移植**——原版样本路径与记录号写死在作者机器上；
 > 4. **`inspect` 支持 `--program` / `--network` 范围过滤**——原版只能全量输出。
 > 5. **生成器按 `all`/`any` 树直接排布**——嵌套并联块共用母线，公共前缀/后缀不再逐行重复；外层 OR、内层 2×2 并联和尾部串联可以写成紧凑的 3 行（`layout: auto`）。
+> 6. **同条件多动作合并**——同一 `condition` 下的多个线圈/定时器写进一个 `actions` 数组即可，条件只画一次，动作在右侧并联；`plan-lint` 会在生成前提示逻辑等价但写法不同的相邻条件（`mergeable_condition`）。
 >
 > 详细对照见 [与原版（0.2.2）的差异](#与原版022的差异)，逐条记录见 [CHANGELOG.md](CHANGELOG.md)。
 > 上游项目本体未声明 LICENSE，`references/panming/` 知识快照为 MIT，商用/再分发前请与上游作者确认。
@@ -64,16 +65,19 @@ PLC 位地址，并调用原厂 32 位 `LadDLL.dll` 做语法校验。Skill 同�
   IO 表 ↔ 梯图；支持 `--delivery` 一键取齐输入。
 - `lint`：静态规则检查——重复线圈、`S` 当线圈、同一 I/O 点被过多网络复用、
   地址越界、注释含简体字（cp950 下会显示成问号）。
+- `plan-lint`：生成前审计 JSON 计划——把条件规范化成 DNF 后比较，提示顺序
+  不同、展开写法不同、以及相邻无条件网络的可合并项；条件宽到无法共用
+  动作母线时也会提前报告。
 - `zhconv`：简繁转换，写注释前把简体转成繁体。
 - `open`：仅启动 `MLCEdit.exe -f <file>` 供人工复核。
 
 ## 与原版（0.2.2）的差异
 
 本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill)
-的衍生版本，0.3.3p 在保留原有解析 / 生成 / 补丁 / 重映射内核和安全边界的前提下，
+ 的衍生版本，0.3.4p 在保留原有解析 / 生成 / 补丁 / 重映射内核和安全边界的前提下，
 做了四项针对性改动：
 
-| 项 | 原版 0.2.2 | 本版 0.3.3p |
+| 项 | 原版 0.2.2 | 本版 0.3.4p |
 | --- | --- | --- |
 | `diff` | 按记录下标硬对齐，插入一条记录后其后全部错位（实测两版真实 `cnc.lad` 报 2893 处差异） | 段对齐（`syntec-lad-diff/v2`），同样两版文件报「未变 1708 / 修改 5 / 新增 2」，带指令预览与单元差异 |
 | 原生校验 | 硬编码导出序号 `#124`，缺少该导出的 `LadDLL.dll` 会导致每次 `validate` 失败 | `#124` 改为可选，缺失时 `error_type=-1`，语法门禁正常运行 |
@@ -152,10 +156,10 @@ git clone https://github.com/Aoliaosiki/Syntec-lad-skill-P.git $target
 也可以下载 ZIP 解压，把文件夹命名为 `syntec-lad` 放入上述目录：
 
 - 直链：
-  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.3p.zip>
+  <https://raw.githubusercontent.com/Aoliaosiki/Syntec-lad-skill-P/main/downloads/syntec-lad-skill-0.3.4p.zip>
 - jsDelivr 加速：
-  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.3p.zip>
-- SHA256：见 `downloads/syntec-lad-skill-0.3.3p.zip.sha256`
+  <https://cdn.jsdelivr.net/gh/Aoliaosiki/Syntec-lad-skill-P@main/downloads/syntec-lad-skill-0.3.4p.zip>
+- SHA256：见 `downloads/syntec-lad-skill-0.3.4p.zip.sha256`
 
 Skill 自带启动器，不要求安装 Python 包：
 
@@ -216,6 +220,7 @@ python .\scripts\run_syntec_lad.py --help
 ```powershell
 python $LadCli inspect .\file.lad
 python $LadCli lint .\file.lad
+python $LadCli plan-lint .\plan.json
 python $LadCli discover "D:\path\to\MB_backup"
 python $LadCli crosscheck --delivery "D:\path\to\MB_backup"
 python $LadCli lookup C6
@@ -281,6 +286,21 @@ python $LadCli patch .\source.lad .\change.json .\patched.lad
   再串联 `A051 ∧ ¬R044.05`，生成 3 行：第一支路占 2 行，第二支路占 1 行，
   `A043/¬A044` 从下方并入 `A051` 前的母线。
 - `expanded`：沿用 0.3.1 的“一个 DNF 项一行”布局，便于对照或回退。
+
+同一 `condition` 下的多个 `actions` 会合并成一个网络：条件只画一次，动作列
+前加一条竖直母线，各动作上下并联。相邻网络若条件完全相同，`lint` 会给出
+`mergeable_condition` 警告，提示把它们合并到同一 `actions` 数组。只有部分
+条件相同时，不要擅自新增中间继电器；保持多个网络，或使用用户确认过的 A 区
+中间标志。
+
+生成前先跑 `plan-lint`。它直接检查 JSON 计划，先把条件规范化成 DNF 再比较，
+因此 `A∧(B∨C)` 与 `(A∧B)∨(A∧C)` 这类展开写法、触点顺序不同的写法、以及
+两个相邻的无条件网络，都会被识别为可合并。1 格线圈和 2 格
+定时器/计数器/流程指令也可以共用同一条动作母线：母线放在第 8 列，线圈前
+保留常规的第 8 列 LINE。只有条件本身已经占满第 8 列时，`plan-lint` 才会报
+`mergeable_condition_too_wide` / `mixed_action_too_wide`；这时需要缩短串联
+条件或保留多个网络。`JMP`/`JSR`/`MSG` 属于流程指令，不能与其它动作共用
+母线，保持独立行；`plan-lint` 会报 `flow_action_not_mergeable`。
 
 两种模式逻辑等价，`build` 都会执行 Python 回读和 LadDLL 原生校验。`auto`
 的回落顺序是树形布局 → 笛卡尔积因式分解 → `expanded`。
@@ -410,4 +430,4 @@ tests/                     unittest 测试
 - 本工具仅用于对自有或已获授权设备的离线梯形图分析与生成；不点击编辑器
   界面、不上传 CNC、不修改控制器。
 
-版本：`0.3.3p`
+版本：`0.3.4p`

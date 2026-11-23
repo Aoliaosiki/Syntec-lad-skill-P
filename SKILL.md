@@ -130,10 +130,29 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
      groups can stay compact (the A43 tool-change network is 3 rows, not 5).
      `expanded` keeps one DNF term per row. Both modes are logically
      equivalent and must pass the same validation gates.
+   - When several outputs share exactly the same condition, put them in
+     **one** network's `actions` array. The compiler draws that condition
+     once and stacks the actions on parallel rows behind a single vertical
+     bus; it no longer repeats the condition per coil. Split networks only
+     when the conditions really differ. If actions share only a prefix, do
+     not invent an intermediate `A` relay: keep separate networks unless the
+     user supplies a reviewed scratch address.
+   - Before building, run `plan-lint` on the JSON document. It compares
+     conditions after DNF normalization, so `A∧(B∨C)` and `(A∧B)∨(A∧C)`, or
+     the same contacts written in a different order, are reported as one
+     mergeable condition. Adjacent unconditional networks are reported too.
+     One-cell coils and 2-cell timers/counters/flow actions can share the
+     same network: the bus sits at column 8 and each coil gets the usual LINE
+     at column 8. Only a condition that itself fills column 8 is reported as
+     `mergeable_condition_too_wide`/`mixed_action_too_wide`; shorten the
+     series string or keep those networks separate. `JMP`/`JSR`/`MSG` are
+     flow actions and must stay in their own rows; `plan-lint` reports them as
+     `flow_action_not_mergeable`.
 
 6. **Generate a new output by default.**
 
    ```powershell
+   python $LadCli plan-lint .\plan.json
    python $LadCli build .\plan.json .\generated.lad
    python $LadCli patch .\source.lad .\change.json .\patched.lad
    ```

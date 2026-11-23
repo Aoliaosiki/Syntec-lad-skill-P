@@ -60,6 +60,78 @@ class LintTests(unittest.TestCase):
             any("O001" in item["detail"] for item in result["issues"])
         )
 
+    def test_mergeable_condition_is_reported(self) -> None:
+        document = _document(
+            [
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "OUT", "operand": "O001"}],
+                },
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "OUT", "operand": "O002"}],
+                },
+            ]
+        )
+        result = lint_document(document)
+        self.assertIn("mergeable_condition", _rules(result))
+
+    def test_unconditional_networks_are_mergeable(self) -> None:
+        document = _document(
+            [
+                {
+                    "condition": {"always": True},
+                    "actions": [{"op": "OUT", "operand": "O001"}],
+                },
+                {
+                    "condition": {"always": True},
+                    "actions": [{"op": "OUT", "operand": "O002"}],
+                },
+            ]
+        )
+        result = lint_document(document)
+        self.assertIn("mergeable_condition", _rules(result))
+
+    def test_mixed_action_width_is_reported_as_mergeable_when_condition_fits(self) -> None:
+        document = _document(
+            [
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "OUT", "operand": "O001"}],
+                },
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [
+                        {
+                            "op": "TIM",
+                            "timer": "TM000",
+                            "preset": "#10",
+                        }
+                    ],
+                },
+            ]
+        )
+        result = lint_document(document)
+        self.assertIn("mergeable_condition", _rules(result))
+        self.assertNotIn("mergeable_condition_too_wide", _rules(result))
+
+    def test_flow_action_is_not_reported_as_mergeable(self) -> None:
+        document = _document(
+            [
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "MSG", "target": "HELLO"}],
+                },
+                {
+                    "condition": {"contact": "I000"},
+                    "actions": [{"op": "OUT", "operand": "O001"}],
+                },
+            ]
+        )
+        result = lint_document(document)
+        self.assertNotIn("mergeable_condition", _rules(result))
+        self.assertIn("flow_action_not_mergeable", _rules(result))
+
     def test_s_used_as_coil_is_reported(self) -> None:
         try:
             document = _document(
@@ -128,7 +200,7 @@ class LintTests(unittest.TestCase):
         result = lint_document(LadDocument.load(sample))
         self.assertGreater(result["source"]["networks"], 100)
         self.assertEqual(
-            result["summary"]["error"] + result["summary"]["warning"],
+            sum(result["summary"].values()),
             len(result["issues"]),
         )
 

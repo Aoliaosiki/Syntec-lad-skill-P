@@ -61,7 +61,7 @@ def conducts(cell: dict, values: dict[str, bool]) -> bool:
     return True
 
 
-def simulate(rows: list[dict], values: dict[str, bool]) -> bool:
+def simulate(rows: list[dict], values: dict[str, bool], operand: str = "O000") -> bool:
     """Evaluate the ladder graph encoded in the rows.
 
     Each row boundary is a node.  A conducting cell joins its left and right
@@ -83,7 +83,11 @@ def simulate(rows: list[dict], values: dict[str, bool]) -> bool:
             width = cell["size"] // 4
             boundary = column + width
             connection = cell["connection"]
-            if cell["mnemonic"] == "OUT" and action is None:
+            if (
+                cell["mnemonic"] == "OUT"
+                and action is None
+                and canonical(str(cell.get("value") or "")) == operand
+            ):
                 action = (row_index, column)
             if conducts(cell, values):
                 connect((row_index, column), (row_index, boundary))
@@ -250,6 +254,134 @@ class LayoutSemanticsTests(unittest.TestCase):
         self.assertNotIn("A040", bottom)
         self.assertEqual(set(bottom), {"A013", "R0075.00"})
         self.assert_equivalent(condition)
+
+    def test_parallel_actions_share_one_condition(self) -> None:
+        condition = {"all": [{"contact": "I001"}, {"contact": "I002"}]}
+        plan = plan_for(condition)
+        plan["programs"][0]["networks"][0]["actions"] = [
+            {"op": "OUT", "operand": "O000"},
+            {"op": "OUT", "operand": "O001"},
+        ]
+        document = compile_plan(plan)
+        rows = code_rows(document)
+        self.assertEqual(len(rows), 2)
+
+        def contacts(row: dict) -> list[str]:
+            return [
+                str(cell["value"])
+                for cell in row["cells"]
+                if cell["mnemonic"] in ("LD", "LDI")
+            ]
+
+        self.assertEqual(contacts(rows[0]), ["I001", "I002"])
+        self.assertEqual(contacts(rows[1]), [])
+        for bits in itertools.product((False, True), repeat=2):
+            values = dict(zip(("I001", "I002"), bits))
+            expected = evaluate(condition, values)
+            self.assertEqual(simulate(rows, values, "O000"), expected)
+            self.assertEqual(simulate(rows, values, "O001"), expected)
+        try:
+            find_lad_dll()
+        except Exception:
+            return
+        validate_document(document)
+
+    def test_parallel_actions_with_mixed_width_share_one_condition(self) -> None:
+        condition = {"all": [{"contact": "I001"}, {"contact": "I002"}]}
+        plan = plan_for(condition)
+        plan["programs"][0]["networks"][0]["actions"] = [
+            {"op": "OUT", "operand": "O000"},
+            {"op": "TIM", "timer": "TM000", "preset": "#10"},
+        ]
+        document = compile_plan(plan)
+        rows = code_rows(document)
+        self.assertEqual(len(rows), 2)
+
+        def contacts(row: dict) -> list[str]:
+            return [
+                str(cell["value"])
+                for cell in row["cells"]
+                if cell["mnemonic"] in ("LD", "LDI")
+            ]
+
+        self.assertEqual(contacts(rows[0]), ["I001", "I002"])
+        self.assertEqual(contacts(rows[1]), [])
+        self.assertTrue(
+            any(
+                cell["mnemonic"] == "OUT" and cell["column"] == 9
+                for cell in rows[0]["cells"]
+            )
+        )
+        self.assertTrue(
+            any(
+                cell["mnemonic"] == "TIM" and cell["column"] == 8
+                for cell in rows[1]["cells"]
+            )
+        )
+        for bits in itertools.product((False, True), repeat=2):
+            values = dict(zip(("I001", "I002"), bits))
+            self.assertEqual(
+                simulate(rows, values, "O000"),
+                evaluate(condition, values),
+            )
+        try:
+            find_lad_dll()
+        except Exception:
+            return
+        validate_document(document)
+
+    def test_nine_contact_condition_drives_two_coils(self) -> None:
+        condition = {"all": [{"contact": f"I{index:03d}"} for index in range(1, 10)]}
+        plan = plan_for(condition)
+        plan["programs"][0]["networks"][0]["actions"] = [
+            {"op": "OUT", "operand": "O000"},
+            {"op": "OUT", "operand": "O001"},
+        ]
+        document = compile_plan(plan)
+        rows = code_rows(document)
+        self.assertEqual(len(rows), 2)
+
+        def contacts(row: dict) -> list[str]:
+            return [
+                str(cell["value"])
+                for cell in row["cells"]
+                if cell["mnemonic"] in ("LD", "LDI")
+            ]
+
+        self.assertEqual(len(contacts(rows[0])), 9)
+        self.assertEqual(contacts(rows[1]), [])
+        for bits in itertools.product((False, True), repeat=9):
+            values = dict(zip((f"I{index:03d}" for index in range(1, 10)), bits))
+            expected = evaluate(condition, values)
+            self.assertEqual(simulate(rows, values, "O000"), expected)
+            self.assertEqual(simulate(rows, values, "O001"), expected)
+
+    def test_flow_action_does_not_share_a_parallel_bus(self) -> None:
+        condition = {"contact": "I001"}
+        plan = plan_for(condition)
+        plan["programs"][0]["networks"][0]["actions"] = [
+            {"op": "MSG", "target": "HELLO"},
+            {"op": "OUT", "operand": "O000"},
+        ]
+        document = compile_plan(plan)
+        rows = code_rows(document)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(
+            [
+                cell["mnemonic"]
+                for cell in rows[0]["cells"]
+                if cell["mnemonic"] in ("LD", "LDI")
+            ],
+            ["LD"],
+        )
+        self.assertEqual(
+            [
+                cell["mnemonic"]
+                for cell in rows[1]["cells"]
+                if cell["mnemonic"] in ("LD", "LDI")
+            ],
+            ["LD"],
+        )
 
     def test_nested_parallel_tool_change_network(self) -> None:
         condition = {

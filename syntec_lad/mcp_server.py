@@ -153,6 +153,21 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "lint_plan",
+        "description": (
+            "Audit a syntec-lad-plan/v1 before building: equivalent adjacent "
+            "conditions that can share one actions array, unconditional "
+            "networks, and mixed 1-cell/2-cell action widths."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "plan": {"type": "string", "description": "path to the plan JSON"},
+            },
+            "required": ["plan"],
+        },
+    },
+    {
         "name": "crosscheck_lad",
         "description": (
             "Cross-check a .lad against paramext.pxt, ParamExt_*.xml, "
@@ -305,6 +320,13 @@ def _tool_lint(args: dict[str, Any]) -> dict[str, Any]:
     return _run_cli(command, fail_on_error=False)
 
 
+def _tool_lint_plan(args: dict[str, Any]) -> dict[str, Any]:
+    return _run_cli(
+        ["plan-lint", str(args["plan"]), "--json"],
+        fail_on_error=False,
+    )
+
+
 def _tool_crosscheck(args: dict[str, Any]) -> dict[str, Any]:
     command = ["crosscheck", "--json"]
     if args.get("lad"):
@@ -362,8 +384,8 @@ def _tool_explain(_: dict[str, Any]) -> str:
             "2. Read the relevant reference via read_reference.",
             "3. Resolve every missing I/O, register, timer, counter, preset, and interlock value.",
             "4. Create a reviewed syntec-lad-plan/v1 or syntec-lad-change/v1 JSON document.",
-            "5. build_plan or patch_lad to a new output path.",
-            "6. validate_lad and diff_lad.",
+            "5. Run lint_plan, merge equivalent adjacent conditions, then build_plan or patch_lad.",
+            "6. validate_lad, lint_lad, and diff_lad.",
             "",
             "Safety:",
             "- Native .lad is the only writable source format.",
@@ -384,6 +406,7 @@ TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "validate_lad": _tool_validate,
     "diff_lad": _tool_diff,
     "lint_lad": _tool_lint,
+    "lint_plan": _tool_lint_plan,
     "crosscheck_lad": _tool_crosscheck,
     "read_reference": _tool_read_reference,
     "list_references": _tool_list_references,
@@ -408,7 +431,7 @@ def _dispatch(method: str, params: dict[str, Any]) -> Any:
         return {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "syntec-lad", "version": "0.3.3p"},
+            "serverInfo": {"name": "syntec-lad", "version": "0.3.4p"},
         }
     if method == "ping":
         return {}

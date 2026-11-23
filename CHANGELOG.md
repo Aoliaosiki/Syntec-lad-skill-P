@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.3.4p - 2026-11-23
+
+### Added
+
+- 同一 network 的多个 `actions` 共用条件时，生成器只排一次条件，并在动作列
+  前画一条竖直母线，把线圈/定时器上下并联；不再为每个动作重复整组条件。
+- `lint` 新增 `mergeable_condition` 警告：相邻网络条件完全相同时提示合并到
+  同一 `actions` 数组。
+- 新增 `plan-lint`：在生成 `.lad` 之前直接审计 JSON 计划。条件按 DNF
+  规范化后比较，触点顺序不同、`A∧(B∨C)` 与 `(A∧B)∨(A∧C)` 等展开写法
+  不同、以及相邻无条件网络都会被识别为可合并。
+- 动作母线支持 1 格线圈与 2 格定时器/计数器/流程指令混排：母线位于第 8
+  列，线圈前保留常规的第 8 列 LINE，不再为每个动作重复整组条件。只有条件
+  本身占满第 8 列时才回退，并由 `plan-lint` 报
+  `mergeable_condition_too_wide` / `mixed_action_too_wide`。
+- `JMP`/`JSR`/`MSG` 保持独立行，不进入并行动作母线；`plan-lint` / `lint`
+  报 `flow_action_not_mergeable`。
+
+### Changed
+
+- `SKILL.md` / `references/workflow.md` 明确：同条件多输出写同一 network；
+  只有部分条件相同时不得擅自新增中间继电器；生成前必须先跑 `plan-lint`。
+- `lint` 的合并判断改为按实际条件宽度和动作起始列计算；条件放不下共用母线
+  时不再误报“可直接合并”，而是报 `mergeable_condition_too_wide`。
+- 版本号 0.3.4p。
+
+### Tests
+
+- `tests/test_layout.py` 增加双线圈共条件的两行布局与逐动作导通断言。
+- `tests/test_lint.py` 增加重复条件网络告警断言。
+- `tests/test_plan_lint.py` 覆盖条件重排、DNF 等价、无条件网络、混合动作
+  宽度和渲染输出；`tests/test_cli.py` 覆盖 `plan-lint` 命令。
+- `tests/test_layout.py` 增加 1 格线圈 + 2 格定时器共条件、以及 9 触点条件
+  驱动双线圈的布局与仿真断言。
+
 ## 0.3.3p - 2026-11-23
 
 ### Fixed

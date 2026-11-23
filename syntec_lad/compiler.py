@@ -644,14 +644,37 @@ def _apply_bus(
 
 def _compile_tree_rows(
     node: ConditionNode,
-    action: Action,
+    actions: list[Action],
     *,
     encoding: str,
 ) -> list[bytes]:
-    """Lay out a condition tree with one bus per ``any`` edge."""
+    """Lay out a condition tree with one bus per ``any`` edge.
 
+    Several actions driven by the same condition are stacked behind one
+    vertical bus.  One-cell coils sit at column 9 with a LINE at column 8;
+    two-cell timers/counters/flow actions start at column 8.  A mixed group
+    therefore places the bus at column 8 and gives each coil its own LINE,
+    which is the same leading cell a normal coil rung already uses.
+    """
+
+    if not actions:
+        raise LadValidationError("network requires at least one action")
     layout = _layout_condition_node(node)
-    action_start = action.action_slot
+    action_start = min(action.action_slot for action in actions)
+    merged = len(actions) > 1
+    if merged and any(action.op in FLOW_OPCODES for action in actions):
+        raise LadUnsupportedError(
+            "flow actions cannot share a parallel action bus"
+        )
+    for action in actions:
+        if action.action_slot == action_start:
+            continue
+        if action.action_slot == action_start + 1 and action.width == 1:
+            continue
+        else:
+            raise LadUnsupportedError(
+                "parallel actions must share one action bus"
+            )
     if layout.width > action_start:
         raise LadUnsupportedError(
             f"network needs {layout.width} columns but action starts at column {action_start}"
@@ -659,7 +682,7 @@ def _compile_tree_rows(
     if layout.height > 64:
         raise LadUnsupportedError("condition layout needs more than 64 rows")
 
-    layouts = [RowLayout() for _ in range(layout.height)]
+    layouts = [RowLayout() for _ in range(max(layout.height, len(actions)))]
     for row, column, leaf in layout.leaves:
         layouts[row].place(column, _make_leaf_unit(leaf, encoding), leaf.kind)
     for row, column in layout.lines:
@@ -667,7 +690,19 @@ def _compile_tree_rows(
 
     top = layouts[0]
     top.fill_lines(layout.width, action_start - 1)
-    top.place(action_start, _make_action_unit(action, encoding), "ACTION")
+    for index, action in enumerate(actions):
+        unit = _make_action_unit(action, encoding)
+        if action.action_slot == action_start:
+            layouts[index].place(action_start, unit, "ACTION")
+        else:
+            layouts[index].place(action_start, make_line_cell(), "LINE")
+            layouts[index].place(action_start + 1, unit, "ACTION")
+
+    if merged:
+        anchor = top.unit_ending_at(action_start)
+        if anchor is None:
+            raise LadUnsupportedError("not enough room for the parallel-action bus")
+        _apply_bus(layouts, action_start, 0, len(actions) - 1)
 
     for column, top_row, bottom_row in layout.buses:
         _apply_bus(layouts, column, top_row, bottom_row)
@@ -864,21 +899,32 @@ def _compile_network_rows(
     if layout_mode not in ("auto", "expanded"):
         raise LadValidationError("layout must be 'auto' or 'expanded'")
 
-    # A network in the plan means one conditional network.  If several actions
-    # are supplied, emit one ladder row per action with the same condition.
+    # A network in the plan means one conditional network.  Actions driven by
+    # the same condition are laid out as parallel outputs behind a single bus,
+    # including mixed 1-cell coils and 2-cell timers/counters.  Flow actions
+    # and conditions too wide for the shared bus fall back to one row per
+    # action.
     #
     # ``auto`` first lays out the original all/any tree.  This keeps nested
     # parallel blocks compact even when their DNF is not a Cartesian product.
     # If the tree cannot fit, it falls back to Cartesian-product factoring and
     # finally to the one-row-per-DNF-term layout.  ``expanded`` always uses the
     # last form.
+    if layout_mode == "auto":
+        try:
+            return _compile_tree_rows(condition, actions, encoding=encoding)
+        except LadUnsupportedError:
+            pass
+
     all_rows: list[bytes] = []
     for action in actions:
         if action.width == 2 and action.action_slot != 8:
             raise LadUnsupportedError("two-cell actions must start at column 8")
         if layout_mode == "auto":
             try:
-                all_rows.extend(_compile_tree_rows(condition, action, encoding=encoding))
+                all_rows.extend(
+                    _compile_tree_rows(condition, [action], encoding=encoding)
+                )
                 continue
             except LadUnsupportedError:
                 pass
