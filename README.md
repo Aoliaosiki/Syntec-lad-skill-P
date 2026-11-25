@@ -15,7 +15,7 @@
   以及润滑/液压/排屑/刀库/M 码写法库。
 
 > **本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2 的优化版。**
-> 当前版本：`0.3.8p`（正式版，不含 PLC 轴生成），仓库：
+> 当前版本：`0.3.8p`（正式版），仓库：
 > [`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P)。
 > 本工具不会点击 LadEditor 界面，不会上传 CNC，也不会直接修改控制器。
 
@@ -73,13 +73,6 @@ python $LadCli lookup @108001
 新增 `tests/test_elements.py`：同一份计划生成 `I/O/A/C/S/R/TM/CT` 八类元件。
 Python 回读 0 issue，原厂 `LadDLL.SyntaxCheck` 通过。该测试只证明格式/编辑器
 兼容，不代表真机动作安全。
-
-
-### 正式版不生成 PLC 轴
-
-`0.3.8p` 不生成 `AX MOVE` / `AX RUN` / `AX STOP`。带轴动作的计划会被
-`plan-lint` 报 `axis_not_supported`，`build` 直接拒绝。需要轴功能请使用
-Alpha 版，并先确认 `Pr21~`、轴群状态、四个连续寄存器和 `O####` 宏合同。
 
 ## 0.3.7p 重点
 
@@ -174,7 +167,7 @@ MacroDev 2014 版和 LadEditor 2.37.0 的 2025 版 DLL 都能通过原生校验�
 | 命令 | 作用 | 关键点 |
 | --- | --- | --- |
 | `inspect` | 查看编码、SHA256、程序边界、物理记录、注释、网络候选 | 支持 `--program` / `--network` 过滤 |
-| `build` | 从 `syntec-lad-plan/v1` 生成新 `.lad` | 正式版不含轴，Alpha 版含三类轴动作；默认做 Python 回读 + LadDLL 原生校验 |
+| `build` | 从 `syntec-lad-plan/v1` 生成新 `.lad` | 默认做 Python 回读 + LadDLL 原生校验 |
 | `patch` | 用 `syntec-lad-change/v1` 修补现有 `.lad` | 每个操作都锁定 `expected_sha256` |
 | `remap` | 同时替换 I/O、C/S/A 位和 R 寄存器位 | 避免 `I0→I400` 后又被 `I40→...` 误替换 |
 | `validate` | 解析回读并调用原生 `LadDLL.SyntaxCheck` | 输出 `parser: PASS` / `native: PASS` |
@@ -200,7 +193,6 @@ MacroDev 2014 版和 LadEditor 2.37.0 的 2025 版 DLL 都能通过原生校验�
   直接失败。缺少的地址和参数仍然必须先向用户确认。
 - `R81`~`R100`（系统参数窗口）、`R8000`~`R8255`（宏程序区）、`I`、`S`
   在阶梯程序里只读；对这些区写入会被 `resource_readonly_write` 拦下。
-- 正式版不生成任何 PLC 轴记录；带轴计划会被 `axis_not_supported` 拒绝。
 - 不生成 RS232、Keyscan、文件系统、外部功能、Coord/Tool 或 FastPLC 记录。
 - 未知或高级记录必须逐字节保留。
 - `build` / `patch` 默认同时执行 Python 回读和 LadDLL 原生校验；任一失败
@@ -527,8 +519,8 @@ python $LadCli plan-lint .\plan.json --output .\plan-lint.json
 | `resource_unused` | info | 登记了但没有任何网络使用 |
 
 
-`plan-lint` 也接受 `syntec-lad-change/v1`：这时跑资源规则（Alpha 版还会跑
-轴规则），按 `operations[].networks` 统计地址，输出里标
+`plan-lint` 也接受 `syntec-lad-change/v1`：这时跑资源规则，按
+`operations[].networks` 统计地址，输出里标
 `Change: N operation(s)`。
 
 ### `resources`
@@ -789,8 +781,6 @@ python $LadCli open .\file.lad --wait
 ```
 
 
-正式版不接受轴动作。带 `AXMOVE` / `AXRUN` / `AXSTOP` 的计划会报
-`axis_not_supported`；需要轴功能请使用 Alpha 版。
 
 ### 同条件多动作
 
@@ -1105,7 +1095,7 @@ python -m unittest discover -s tests -v
 
 当前结果：
 
-- 公开构建跑完整测试套件；轴测试不包含在正式版。
+- 公开构建跑完整测试套件。
 - `examples/resources.plan.json`：`plan-lint: PASS`，`build` 原生校验
   `PASS error_count=0`，`comments` 覆盖率 L1 7/7、L2 2/2。
 - 本机 LadEditor 2.37.0（2025 版）和
@@ -1116,7 +1106,7 @@ python -m unittest discover -s tests -v
 - 混合 `TIM+OUT` 同条件布局：`native: PASS error_count=0`。
 - 9 触点条件驱动双线圈：`native: PASS error_count=0`。
 - 八类元件 `I/O/A/C/S/R/TM/CT`：Python 回读 0 issue，原厂
-  `LadDLL.SyntaxCheck` 通过；轴动作会被明确拒绝。
+  `LadDLL.SyntaxCheck` 通过。
 - R 分区表覆盖 `R0~R65535` 无空洞；`R2050`/`R2100`/`R700.0`/`@108001`
   的查询与 `plan-lint` 规则均有单元测试。
 - `LadDLL.dll` 和 `MLCEdit.exe` 的自定义盘符安装目录可由兜底搜索自动定位。

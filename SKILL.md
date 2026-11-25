@@ -33,8 +33,13 @@ interlock relationship.
   bit-access limit, and conditional Pr requirement.
 - Explain the difference between ladder `R@R` indirect addressing, macro `@`
   global variables, and `#` macro variables.
-- Reject PLC-axis generation explicitly; use the Alpha edition for `AX MOVE`,
-  `AX RUN`, and `AX STOP`.
+- **PLC-axis work is hard-prohibited.** Do not generate, hand-assemble, patch
+  in, or otherwise write `AX MOVE`, `AX RUN`, or `AX STOP`, and do not bypass
+  the edition gate. PLC-axis motion can cause machine collision, equipment
+  damage, or personal injury; this edition provides no axis configuration,
+  axis-group, or macro-contract validation, so there is no safe way to use it
+  here. Stop and tell the user to switch to the Alpha edition for a dedicated
+  safety review.
 - Translate a requested process into a reviewed ladder structure using the
   knowledge references.
 
@@ -44,7 +49,10 @@ interlock relationship.
   writable source. The native `.lad` is the only writable ladder source.
 - Do not click the editor UI, upload to a CNC, or modify a controller.
 - Do not guess record boundaries, addresses, presets, or interlock logic.
-- Do not generate PLC-axis records at all. Do not generate RS232, Keyscan,
+- **Do not generate, hand-assemble, patch in, or write any PLC-axis motion
+  record.** PLC-axis motion can cause collision, equipment damage, or personal
+  injury, and this edition has no axis safety validation. Do not bypass the
+  edition gate or edit raw axis bytes. Do not generate RS232, Keyscan,
   filesystem, external-function, Coord/Tool, or FastPLC records. Preserve
   unknown records byte-for-byte.
 
@@ -153,9 +161,12 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    If Atlassian MCP is unavailable, say `未联网云端验证` explicitly. See
    `references/confluence-verification.md`.
 
-   This edition does not generate PLC-axis actions. If the request needs
-   `AX MOVE`, `AX RUN`, or `AX STOP`, stop and tell the user to use the Alpha
-   edition.
+   **Hard prohibition.** This edition must not generate, hand-assemble, patch
+   in, or otherwise write `AX MOVE`, `AX RUN`, or `AX STOP`. PLC-axis motion
+   can cause collision, equipment damage, or personal injury; the public
+   edition has no axis configuration, axis-group, or macro-contract
+   validation. Do not bypass the gate or edit raw axis records. Stop and tell
+   the user to use the Alpha edition after a dedicated safety review.
 
 4. **Select and adapt a structure.** If the request matches a pattern or
    function-library section, adapt the structure, not the machine-specific
