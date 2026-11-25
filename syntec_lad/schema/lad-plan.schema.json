@@ -24,6 +24,13 @@
         "$ref": "#/$defs/variable"
       }
     },
+    "resources": {
+      "type": "array",
+      "description": "Reviewable address register. Every I/O point, C/S bit and R0~R255 register used by the plan must appear here. source=user or io-table means a human confirmed it; source=suggested blocks build.",
+      "items": {
+        "$ref": "#/$defs/resource"
+      }
+    },
     "programs": {
       "type": "array",
       "minItems": 1,
@@ -46,6 +53,44 @@
           "type": "string"
         },
         "long": {
+          "type": "string"
+        }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "required": ["addr", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "addr": {
+          "type": "string",
+          "pattern": "^(@?)(I|O|A|C|S|TM|CT)[0-9]{1,4}(\\.[0-9]{1,2})?$|^@?R[0-9]{1,5}(\\.[0-9]{1,2})?$"
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Short mnemonic used in the drawings, e.g. 润滑泵"
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "What this point does and when it is driven"
+        },
+        "permission": {
+          "enum": ["read", "write", "readwrite"]
+        },
+        "retain": {
+          "type": "boolean",
+          "description": "True only for R193~R255 and other verified power-hold areas"
+        },
+        "owner": {
+          "type": "string",
+          "description": "Program or function that owns this address"
+        },
+        "source": {
+          "enum": ["io-table", "user", "scan", "suggested"],
+          "description": "io-table=from the customer IO table, user=confirmed by the customer, scan=copied from resource-report, suggested=model guess (blocks build)"
+        },
+        "note": {
           "type": "string"
         }
       }

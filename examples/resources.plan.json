@@ -1,0 +1,190 @@
+{
+  "schema": "syntec-lad-plan/v1",
+  "encoding": "gb2312",
+  "programs": [
+    {
+      "name": "MAIN",
+      "comment": "演示主程序（地址均为示例，使用者需自行确认）",
+      "networks": [
+        {
+          "comment": "启动/自锁：I000 启动，I001 停止，O000 自锁",
+          "condition": {
+            "all": [
+              {
+                "contact": "I000"
+              },
+              {
+                "any": [
+                  {
+                    "contact": "I001",
+                    "normally": "closed"
+                  },
+                  {
+                    "contact": "O000"
+                  }
+                ]
+              }
+            ]
+          },
+          "actions": [
+            {
+              "op": "OUT",
+              "operand": "O000"
+            }
+          ]
+        },
+        {
+          "comment": "100ms 定时器示例",
+          "condition": {
+            "contact": "I002"
+          },
+          "actions": [
+            {
+              "op": "TIM",
+              "timer": "TM000",
+              "unit": "100ms",
+              "preset": "#00050"
+            },
+            {
+              "op": "OUT",
+              "operand": "O001"
+            }
+          ]
+        },
+        {
+          "comment": "子程序调用示例",
+          "condition": {
+            "always": true
+          },
+          "actions": [
+            {
+              "op": "JSR",
+              "target": "SUB1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SUB1",
+      "comment": "演示子程序",
+      "networks": [
+        {
+          "comment": "子程序输出",
+          "condition": {
+            "contact": "I010"
+          },
+          "actions": [
+            {
+              "op": "OUT",
+              "operand": "O010"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "I000",
+      "short": "启动按钮",
+      "long": "示例地址，使用者需自行确认"
+    },
+    {
+      "name": "I001",
+      "short": "停止按钮",
+      "long": "常闭"
+    },
+    {
+      "name": "I002",
+      "short": "定时启动",
+      "long": "示例地址"
+    },
+    {
+      "name": "I010",
+      "short": "子程序输入",
+      "long": "示例地址"
+    },
+    {
+      "name": "O000",
+      "short": "电机自锁",
+      "long": "示例地址"
+    },
+    {
+      "name": "O001",
+      "short": "定时输出",
+      "long": "示例地址"
+    },
+    {
+      "name": "O010",
+      "short": "子程序输出",
+      "long": "示例地址"
+    }
+  ],
+  "resources": [
+    {
+      "addr": "I0",
+      "symbol": "启动按钮",
+      "purpose": "操作面板启动，常开",
+      "permission": "read",
+      "source": "user",
+      "note": "示例，实际以现场 IO 点表为准"
+    },
+    {
+      "addr": "I1",
+      "symbol": "停止按钮",
+      "purpose": "操作面板停止，常闭",
+      "permission": "read",
+      "source": "user",
+      "note": "示例"
+    },
+    {
+      "addr": "I2",
+      "symbol": "定时启动",
+      "purpose": "触发 100ms 定时器",
+      "permission": "read",
+      "source": "user",
+      "note": "示例"
+    },
+    {
+      "addr": "I10",
+      "symbol": "子程序输入",
+      "purpose": "SUB1 的启动条件",
+      "permission": "read",
+      "source": "user",
+      "note": "示例"
+    },
+    {
+      "addr": "O0",
+      "symbol": "电机自锁",
+      "purpose": "启动后保持输出",
+      "permission": "write",
+      "source": "user",
+      "note": "示例"
+    },
+    {
+      "addr": "O1",
+      "symbol": "定时输出",
+      "purpose": "TM0 到达后输出",
+      "permission": "write",
+      "source": "user",
+      "note": "示例"
+    },
+    {
+      "addr": "O10",
+      "symbol": "子程序输出",
+      "purpose": "SUB1 驱动的输出",
+      "permission": "write",
+      "source": "user",
+      "note": "示例"
+    },
+    {
+      "addr": "TM0",
+      "symbol": "延时定时器",
+      "purpose": "100ms 时基，预置 50",
+      "permission": "readwrite",
+      "source": "user",
+      "note": "示例"
+    }
+  ]
+}

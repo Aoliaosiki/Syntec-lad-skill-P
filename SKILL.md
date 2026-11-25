@@ -1,6 +1,6 @@
 ---
 name: syntec-lad
-description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
+description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; also covers I/O/register resource planning with human-confirmed plan.resources, graded comment coverage, and optional Confluence cross-verification with explicit offline degradation; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
 metadata:
   short-description: Edit, validate, and design Syntec .lad ladder logic safely
 ---
@@ -81,8 +81,10 @@ supports:
   directory, preserving `SKILL.md` and `references/`.
 
 The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
-`patch_lad`, `validate_lad`, `diff_lad`, `read_reference`,
-`list_references`, and `explain_capabilities`. See `PORTABLE.md`.
+`patch_lad`, `validate_lad`, `diff_lad`, `lint_lad`, `lint_plan`,
+`crosscheck_lad`, `resource_report`, `comment_coverage`, `confluence_status`,
+`read_reference`, `list_references`, and `explain_capabilities`. See
+`PORTABLE.md`.
 
 ## Mandatory workflow
 
@@ -108,9 +110,31 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
 
    Use `references/knowledge-map.md` to choose the smallest relevant file.
 
-3. **Resolve missing values before writing.** Ask for every missing I/O point,
-   register, timer, counter, preset, and interlock relationship. Do not
-   substitute a plausible-looking address.
+3. **Plan resources before drawing, for new files and edits alike.**
+
+   ```powershell
+   python $LadCli resources .\source.lad --io .\io-points.csv
+   python $LadCli resources .\source.lad --format csv --output .\resource-baseline.csv
+   ```
+
+   The report lists used addresses, their existing comments, read/write counts,
+   owning programs, free candidates, read-only violations, and the two-way
+   difference against the IO point table. **Free candidates are not
+   allocations.** Record confirmed rows in `plan.resources` with
+   `source=io-table` or `source=user`; `source=scan` only for addresses copied
+   from an existing file; `source=suggested` blocks `build`. Ask for every
+   missing I/O point, register, timer, counter, preset, and interlock
+   relationship. Do not substitute a plausible-looking address. See
+   `references/resource-planning.md`.
+
+   In parallel, state the cloud evidence level:
+
+   ```powershell
+   python $LadCli cloud-status --snapshots .\references\snapshots
+   ```
+
+   If Atlassian MCP is unavailable, say `未联网云端验证` explicitly. See
+   `references/confluence-verification.md`.
 
 4. **Select and adapt a structure.** If the request matches a pattern or
    function-library section, adapt the structure, not the machine-specific
@@ -122,6 +146,14 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    - New file: `syntec-lad-plan/v1`
    - Existing file: `syntec-lad-change/v1` with `base_sha256` and the exact
      `expected_sha256` of every target record range.
+   - Add `resources` for every `I`/`O`/`C`/`S` address and every
+     `R0`~`R255` register the plan touches. `plan-lint` reports missing
+     interface entries as `resource_missing`, duplicate or invalid sources as
+     errors, and writes to `R81`~`R100`/`R8000`~`R8255`/`I`/`S` as
+     `resource_readonly_write`.
+   - `syntec-lad-change/v1` takes the same `resources` array. `plan-lint`
+     accepts change documents and checks only the resource rules, and `patch`
+     refuses to run when that gate fails (`--allow-unverified` overrides).
    - Leave `layout` at `auto` unless the user asks for the old expanded form.
      `auto` lays out the original `all`/`any` tree directly: `all` places its
      children in series and top-aligned, while every `any` gets a vertical bus
@@ -170,11 +202,21 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    ```powershell
    python $LadCli validate .\generated.lad
    python $LadCli diff .\source.lad .\generated.lad
+   python $LadCli comments .\generated.lad
+   python $LadCli crosscheck .\generated.lad --snapshots .\references\snapshots
    ```
+
+   `comments` is advisory: L1 interface points are reported when they lack a
+   short comment, L2 when a program has no header comment. Neither blocks a
+   build, because fabricated comments are worse than none. Follow
+   `references/comment-policy.md` when filling the gaps.
 
 9. **Report the delivery evidence.** Include absolute input/output paths,
    source/output SHA256, record counts, native result, changed record ranges,
-   and any `.bak` or `.LC` sidecar handling.
+   and any `.bak` or `.LC` sidecar handling. Also state the cloud level:
+   `L2` only when Atlassian MCP actually returned a page version, `L1+` for
+   local snapshots only, `L1` when nothing was verified. Never omit the
+   offline line — write `未联网云端验证` instead of silence.
 
 10. **Open for human review only.** `open` starts `MLCEdit.exe -f <file>`.
     It is not a syntax check and must not lead to UI automation or a CNC
@@ -377,6 +419,9 @@ question marks under cp950.
 | Full opcode/format appendix | `references/panming/TECHNICAL.md` |
 | Native plan/change workflow | `references/workflow.md` |
 | MB/SB/package 备份的固定目录结构 | `references/delivery-layout.md` |
+| I/O、A、R 资源盘点与人工确认 | `references/resource-planning.md` |
+| 注释分级：什么必须写、什么不必写 | `references/comment-policy.md` |
+| Confluence 二次验证与离线降级 | `references/confluence-verification.md` |
 
 ## Native setup
 

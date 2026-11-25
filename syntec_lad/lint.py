@@ -316,6 +316,21 @@ def lint_document(
             _issue("missing_end", "error", "未找到 END/FEND 指令，逻辑行结尾不完整")
         )
 
+    from .comments import comment_coverage
+
+    coverage = comment_coverage(document)
+    missing_l1 = [item for item in coverage["missing"] if item["level"] == "L1"]
+    if missing_l1:
+        issues.append(
+            _issue(
+                "comment_coverage",
+                "info",
+                f"{len(missing_l1)} 个接口类元件（I/O/C/S、R0~R255）没有注释；"
+                "用 comments 命令看明细，按需补短注释",
+                extra={"missing": len(missing_l1)},
+            )
+        )
+
     counts = {"error": 0, "warning": 0, "info": 0}
     for item in issues:
         counts[item["severity"]] = counts.get(item["severity"], 0) + 1

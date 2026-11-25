@@ -190,7 +190,59 @@ TOOLS: list[dict[str, Any]] = [
                 },
                 "alarm_xml": {"type": "string"},
                 "io": {"type": "string", "description": "IO point table (address<TAB>description)"},
+                "snapshots": {
+                    "type": "string",
+                    "description": "Confluence snapshot directory; documented addresses are compared with the ladder",
+                },
+                "cloud_online": {
+                    "type": "boolean",
+                    "description": "set true only after the agent actually read pages through Atlassian MCP",
+                },
                 "context": {"type": "integer", "default": 12, "minimum": 1},
+            },
+        },
+    },
+    {
+        "name": "resource_report",
+        "description": (
+            "Inventory the addresses a .lad already uses, their comments, free "
+            "candidates, and read-only violations. Never allocates: rows must be "
+            "confirmed by a human before entering plan.resources."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "lad": {"type": "string"},
+                "io": {"type": "string", "description": "IO point table to compare against"},
+                "r_max": {"type": "integer", "default": 1023},
+            },
+            "required": ["lad"],
+        },
+    },
+    {
+        "name": "comment_coverage",
+        "description": (
+            "Report comment coverage by level: L1 interface points (I/O/C/S, "
+            "R0~R255), L2 program headers, L3 long notes."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"lad": {"type": "string"}},
+            "required": ["lad"],
+        },
+    },
+    {
+        "name": "confluence_status",
+        "description": (
+            "Report the Confluence verification level and any local snapshots. "
+            "Always states explicitly when no online cloud verification happened."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "snapshots": {"type": "string"},
+                "online": {"type": "boolean"},
+                "reason": {"type": "string"},
             },
         },
     },
@@ -341,8 +393,39 @@ def _tool_crosscheck(args: dict[str, Any]) -> dict[str, Any]:
         command += ["--alarm-xml", str(args["alarm_xml"])]
     if args.get("io"):
         command += ["--io", str(args["io"])]
+    if args.get("snapshots"):
+        command += ["--snapshots", str(args["snapshots"])]
+    if args.get("cloud_online"):
+        command.append("--cloud-online")
     if args.get("context"):
         command += ["--context", str(int(args["context"]))]
+    return _run_cli(command, fail_on_error=False)
+
+
+def _tool_resources(args: dict[str, Any]) -> dict[str, Any]:
+    command = ["resources", str(args["lad"]), "--json"]
+    if args.get("io"):
+        command += ["--io", str(args["io"])]
+    if args.get("r_max"):
+        command += ["--r-max", str(int(args["r_max"]))]
+    return _run_cli(command, fail_on_error=False)
+
+
+def _tool_comments(args: dict[str, Any]) -> dict[str, Any]:
+    return _run_cli(
+        ["comments", str(args["lad"]), "--json"],
+        fail_on_error=False,
+    )
+
+
+def _tool_confluence_status(args: dict[str, Any]) -> dict[str, Any]:
+    command = ["cloud-status", "--json"]
+    if args.get("snapshots"):
+        command += ["--snapshots", str(args["snapshots"])]
+    if args.get("online"):
+        command.append("--online")
+    if args.get("reason"):
+        command += ["--reason", str(args["reason"])]
     return _run_cli(command, fail_on_error=False)
 
 
@@ -381,15 +464,19 @@ def _tool_explain(_: dict[str, Any]) -> str:
             "",
             "Workflow:",
             "1. inspect_lad on the native source.",
-            "2. Read the relevant reference via read_reference.",
-            "3. Resolve every missing I/O, register, timer, counter, preset, and interlock value.",
-            "4. Create a reviewed syntec-lad-plan/v1 or syntec-lad-change/v1 JSON document.",
-            "5. Run lint_plan, merge equivalent adjacent conditions, then build_plan or patch_lad.",
-            "6. validate_lad, lint_lad, and diff_lad.",
+            "2. resource_report on an existing file; confluence_status to state the cloud evidence level.",
+            "3. Read the relevant reference via read_reference.",
+            "4. Resolve every missing I/O, register, timer, counter, preset, and interlock value.",
+            "5. Record confirmed addresses in plan.resources with source=user or io-table.",
+            "6. Create a reviewed syntec-lad-plan/v1 or syntec-lad-change/v1 JSON document.",
+            "7. Run lint_plan, merge equivalent adjacent conditions, then build_plan or patch_lad.",
+            "8. validate_lad, lint_lad, comment_coverage, and diff_lad.",
             "",
             "Safety:",
             "- Native .lad is the only writable source format.",
             "- Knowledge examples do not supply machine-specific addresses.",
+            "- source=suggested in plan.resources blocks build; a human must confirm first.",
+            "- Without Atlassian MCP the report says cloud verification did not happen.",
             "- Final delivery requires parser readback and native LadDLL success.",
             "- This server never clicks the editor and never uploads to a CNC.",
             "",
@@ -408,6 +495,9 @@ TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "lint_lad": _tool_lint,
     "lint_plan": _tool_lint_plan,
     "crosscheck_lad": _tool_crosscheck,
+    "resource_report": _tool_resources,
+    "comment_coverage": _tool_comments,
+    "confluence_status": _tool_confluence_status,
     "read_reference": _tool_read_reference,
     "list_references": _tool_list_references,
     "explain_capabilities": _tool_explain,
@@ -431,7 +521,7 @@ def _dispatch(method: str, params: dict[str, Any]) -> Any:
         return {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "syntec-lad", "version": "0.3.6p"},
+            "serverInfo": {"name": "syntec-lad", "version": "0.3.7p"},
         }
     if method == "ping":
         return {}
@@ -505,3 +595,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -441,6 +441,17 @@ def render_crosscheck(result: dict[str, Any], *, context: int = 12) -> str:
             f"IO     : 表 {io['table_points']} 点 | 梯图 {io['ladder_points']} 点 | "
             f"仅表内有 {len(io['only_in_table'])} | 仅梯图有 {len(io['only_in_ladder'])}"
         )
+    cloud = result.get("cloud")
+    if cloud:
+        lines.append(
+            f"Cloud  : {cloud['level']} — {cloud['note']}"
+        )
+        if cloud.get("snapshots"):
+            pages = ", ".join(
+                f"{item['page_id']} v{item['version'] or '?'}"
+                for item in cloud["snapshots"]
+            )
+            lines.append(f"         snapshots: {pages}")
 
     for title, items in (
         ("Errors", errors),

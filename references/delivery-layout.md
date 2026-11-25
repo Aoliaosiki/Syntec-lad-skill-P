@@ -75,7 +75,7 @@ syntec-lad lint "D:\...\Ladder\cnc.lad"
 - **大小写**：`CNC.LAD`、`ParamExt_CHS.Xml`、`AlarmPLC_CHS.Xml` 在不同版本里大小写不一致，
   工具已按不区分大小写匹配；手工写脚本时必须注意。
 - **`IoMap_Customer.xml` 不是点位表**：它记录 RIO 端口与 LogicStart/PhysicStart 的硬件映射，
-  没有「I013=安全门」这种语义。点位核对要用现场整理的 `地址<TAB>描述` 表（如 `天樱IO.dat`）。
+  没有「I013=安全门」这种语义。点位核对要用现场整理的 `地址<TAB>描述` 表（如 `现场IO.dat`）。
 - **`ParamExt_RBit_*.xml` 是位参数**：与 `ParamExt_*.xml` 是两套东西，别混用。
 - **`DiskC/OpenCNC/Res/paramext.pxt` 与 `ParameterExt/paramext.pxt`** 位置不同，但格式一致。
 - MB/SB 备份里的 `BackupOnly/`、`OPLog/` 是日志，不是配置，不要拿去解析。

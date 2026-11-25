@@ -23,3 +23,14 @@ python -m syntec_lad validate examples\mvp.lad
 
 The checked-in `.lad` fixtures pass both the SDK parser and the native LadDLL
 syntax checker when the installed LadEditor is present.
+
+`resources.plan.json` is `demo.plan.json` plus a worked `variables` block and a
+worked `resources` table. Every row is `source: "user"`, so it passes
+`plan-lint`; the addresses are still placeholders. Use it as the template for
+what a reviewed resource table looks like, not as a machine-ready allocation.
+
+```powershell
+python -m syntec_lad plan-lint examples\resources.plan.json
+python -m syntec_lad build examples\resources.plan.json examples\resources.lad
+python -m syntec_lad comments examples\resources.lad
+```

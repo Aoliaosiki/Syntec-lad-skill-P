@@ -25,6 +25,9 @@ entire knowledge base for a simple record inspection.
 | Resolve R512~R1023 permissions | `panming/R512-R1023-权限表.md` |
 | Understand opcodes or round-trip structure | `panming/TECHNICAL.md` |
 | Modify an existing file safely | `workflow.md` |
+| Plan I/O, A, and R allocation without guessing | `resource-planning.md` |
+| Decide which elements need comments | `comment-policy.md` |
+| Verify against Confluence, or degrade when offline | `confluence-verification.md` |
 
 ## Required order before writing
 
@@ -34,8 +37,11 @@ entire knowledge base for a simple record inspection.
    function-library section.
 4. Ask for every missing I/O point, register, timer, counter, preset, and
    interlock relationship.
-5. Draft a reviewed JSON plan/change.
-6. Build or patch a new output and validate it with the native SDK.
+5. Run `resources` on an existing file, or draft the resource table for a new
+   one; record confirmed rows in `plan.resources`.
+6. Draft a reviewed JSON plan/change.
+7. Build or patch a new output and validate it with the native SDK.
+8. Run `comments` and state the Confluence evidence level.
 
 ## Source hierarchy
 

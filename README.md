@@ -1,6 +1,6 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.6p）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.7p）
 
-[![Version](https://img.shields.io/badge/version-0.3.6p-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.7p-blue)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-green)](pyproject.toml)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](README.md)
 
@@ -14,12 +14,13 @@
   12 个工艺模式，以及润滑/液压/排屑/刀库/M 码写法库。
 
 > **本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2 的优化版。**
-> 当前版本：`0.3.6p`，仓库：
+> 当前版本：`0.3.7p`，仓库：
 > [`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P)。
 > 本工具不会点击 LadEditor 界面，不会上传 CNC，也不会直接修改控制器。
 
 ## 目录
 
+- [0.3.7p 重点](#037p-重点)
 - [0.3.6p 重点](#036p-重点)
 - [功能总览](#功能总览)
 - [安全边界](#安全边界)
@@ -37,6 +38,38 @@
 - [常见问题](#常见问题)
 - [目录结构](#目录结构)
 - [版本与授权](#版本与授权)
+
+## 0.3.7p 重点
+
+### 资源规划：先出表，人确认，再进 plan
+
+```powershell
+python $LadCli resources cnc.lad --io 点位表.csv
+python $LadCli plan-lint plan.json
+```
+
+`resources` 盘点已用地址、读/写次数、所属程序、现有注释、空闲候选和只读区
+告警。空闲候选只是候选：要用必须写进 `plan.resources`，`source` 为
+`io-table` 或 `user`。`source=suggested` 会让 `plan-lint` 直接失败。
+
+### 注释分级：接口必须写，内部按需
+
+```powershell
+python $LadCli comments cnc.lad
+```
+
+L1 覆盖 `I/O/C/S` 和 `R0~R255`；L2 检查每个程序有没有头注释；L3 只统计长注释。
+只报告不阻断，避免为了凑覆盖率写废话。
+
+### Confluence 二次验证可降级
+
+```powershell
+python $LadCli cloud-status --snapshots references\snapshots
+python $LadCli crosscheck cnc.lad --snapshots references\snapshots
+```
+
+没有 MCP 在线证据时明确输出 `未联网云端验证`；只有本地快照时标 `L1+`，
+并提示快照可能落后于在线页。
 
 ## 0.3.6p 重点
 
@@ -105,9 +138,12 @@ MacroDev 2014 版和 LadEditor 2.37.0 的 2025 版 DLL 都能通过原生校验�
 | `validate` | 解析回读并调用原生 `LadDLL.SyntaxCheck` | 输出 `parser: PASS` / `native: PASS` |
 | `diff` | 按注释块、网络、结构记录做段对齐比较 | 修改项给出操作数级差异，不是只有字节差异 |
 | `lint` | 静态规则检查 | 重复线圈、S 当线圈、I/O 复用、越界、简体注释、可合并条件 |
-| `plan-lint` | 生成前检查 JSON 计划 | DNF 等价条件、无条件网络、动作母线宽度、流程动作 |
+| `resources` | 盘点已用/空闲的 I/O、A、C、S、TM、CT、R 地址 | 只出候选，不分配；可选对照 IO 点表 |
+| `comments` | 按级别统计注释覆盖率 | L1 接口点、L2 程序头、L3 长注释 |
+| `cloud-status` | 报告 Confluence 校验级别与快照 | 无证据时明确输出“未联网云端验证” |
+| `plan-lint` | 生成前检查 JSON 计划 | DNF 等价条件、动作母线宽度、流程动作、资源来源与只读区 |
 | `discover` | 识别 MB/SB/package 备份结构 | 自动找 `.lad`、`paramext.pxt`、`ParamExt_*.xml`、`AlarmPLC_*.xml`、IO 表 |
-| `crosscheck` | 跨文件四项核对 | 参数表 ↔ 梯图、三语 ↔ 三语、报警位 ↔ 文案、IO 表 ↔ 梯图 |
+| `crosscheck` | 跨文件四项核对 | 参数表 ↔ 梯图、三语 ↔ 三语、报警位 ↔ 文案、IO 表 ↔ 梯图；可加 `--snapshots` 对照 Confluence 快照 |
 | `lookup` | 查询 602 条 C/S/R 地址索引 | 无命中时回落到参考文档全文检索 |
 | `zhconv` | 简体 ↔ 繁体转换 | 写 cp950/Big5 注释前使用 |
 | `open` | 启动 `MLCEdit.exe -f <file>` | 仅供人工复核，不是语法校验 |
@@ -116,8 +152,12 @@ MacroDev 2014 版和 LadEditor 2.37.0 的 2025 版 DLL 都能通过原生校验�
 
 - 原生 `.lad` 是唯一可写源格式；`.il`、PDF、BMP、截图和旧文本转储不能
   直接作为生成输入。
-- 不自行分配 I/O、寄存器、定时器、计数器、预置值或联锁关系。缺少的地址
-  和参数必须先向用户确认。
+- 资源规划是**可审阅的建议**，不是自动分配。`resources` 只盘点现状并列出
+  空闲候选；一条地址要进生成流程，必须写进 `plan.resources`，且
+  `source` 为 `user` 或 `io-table`。`source=suggested` 会让 `plan-lint`
+  直接失败。缺少的地址和参数仍然必须先向用户确认。
+- `R81`~`R100`（系统参数窗口）、`R8000`~`R8255`（宏程序区）、`I`、`S`
+  在阶梯程序里只读；对这些区写入会被 `resource_readonly_write` 拦下。
 - 不生成新的轴、RS232、Keyscan、文件系统、外部功能、Coord/Tool 或
   FastPLC 记录。
 - 未知或高级记录必须逐字节保留。
@@ -334,6 +374,8 @@ python $LadCli patch .\source.lad .\change.json --in-place
 - 每个操作的 `expected_sha256` 防止目标记录范围已变化。
 - 跨网络边界、结构行和过期哈希都会被拒绝。
 - 支持 `insert`（按锚点或范围）、`replace`、`delete`。
+- 打补丁前自动跑 `change` 的资源门禁：`resources` 里有 `source=suggested`
+  或写了只读区时直接拒绝。确认后仍要覆盖，才用 `--allow-unverified`。
 
 ### `remap`
 
@@ -435,6 +477,50 @@ python $LadCli plan-lint .\plan.json --output .\plan-lint.json
 | `mergeable_condition_too_wide` | info | 条件宽度超过共用母线起点 |
 | `mixed_action_too_wide` | info | 同一网络混用 1/2 格动作且条件过宽 |
 | `flow_action_not_mergeable` | info | 流程动作不能与其它动作共用母线 |
+| `resource_unverified` | error | `plan.resources` 里还有 `source=suggested` |
+| `resource_source_invalid` | error | `source` 不在 `io-table/user/scan/suggested` 内 |
+| `resource_duplicate` | error | 同一地址登记两次 |
+| `resource_readonly_write` | error | 写了 `R81~R100`、`R8000~R8255`、`I` 或 `S` |
+| `resource_missing` | warning | 用了 I/O/C/S 或 `R0~R255` 却没登记 |
+| `resource_unused` | info | 登记了但没有任何网络使用 |
+
+`plan-lint` 也接受 `syntec-lad-change/v1`：这时只跑资源规则，按
+`operations[].networks` 统计地址，输出里标 `Change: N operation(s)`。
+
+### `resources`
+
+```powershell
+python $LadCli resources .\cnc.lad
+python $LadCli resources .\cnc.lad --io .\io-points.csv
+python $LadCli resources .\cnc.lad --format csv --output .\baseline.csv
+python $LadCli resources .\cnc.lad --r-max 2047 --json
+```
+
+输出每个族的已用地址、读/写次数、所属程序、现有注释、空闲候选，以及
+IO 点表的双向差集。**空闲候选不是分配结果**；新建和修改都必须由人确认后
+写入 `plan.resources`。详见 `references/resource-planning.md`。
+
+### `comments`
+
+```powershell
+python $LadCli comments .\cnc.lad
+python $LadCli comments .\cnc.lad --json --output .\coverage.json
+```
+
+按三级统计：L1 接口点（I/O/C/S、`R0~R255`）、L2 程序头注释、L3 长注释。
+只报告不阻断；写法规范见 `references/comment-policy.md`。
+
+### `cloud-status`
+
+```powershell
+python $LadCli cloud-status
+python $LadCli cloud-status --snapshots .\references\snapshots
+python $LadCli cloud-status --snapshots .\references\snapshots --online
+```
+
+没有 MCP 在线证据时输出 `L1 — 未联网云端验证`；只有本地快照时输出 `L1+`。
+`--online` 只能由实际读过页面的 agent 添加。接入步骤见
+`references/confluence-verification.md`。
 
 ### `discover`
 
@@ -553,7 +639,37 @@ python $LadCli open .\file.lad --wait
 | `programs` | 是 | 至少一个程序 |
 | `encoding` | 否 | `gb2312`、`gb18030`、`big5` |
 | `layout` | 否 | `auto`（默认）或 `expanded` |
-| `variables` | 否 | 变量注释 |
+| `variables` | 否 | 变量注释（type-4，`name/short/long`） |
+| `resources` | 否 | 地址登记表；新建流程必须提供，缺省时保持旧行为 |
+
+### `resources` 字段
+
+```json
+{
+  "addr": "R0200",
+  "symbol": "润滑累计次数",
+  "purpose": "每次打油完成加 1，满 500 次提示保养",
+  "permission": "readwrite",
+  "retain": true,
+  "owner": "MAIN",
+  "source": "user",
+  "note": "掉电保持，避开 R103~R192 刀号区"
+}
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `addr` | 是 | `I0` / `R200.03` / `TM12` |
+| `source` | 是 | `io-table` / `user` / `scan` / `suggested` |
+| `symbol` | 否 | 图上短名 |
+| `purpose` | 否 | 用途和触发条件 |
+| `permission` | 否 | `read` / `write` / `readwrite` |
+| `retain` | 否 | 是否掉电保持 |
+| `owner` | 否 | 归属程序或功能 |
+| `note` | 否 | 现场差异、选配说明 |
+
+`source=suggested` 是唯一会让 `plan-lint` 失败的值：它表示「模型建议、
+还没人确认」。把 `suggested` 批量改成 `user` 来绕过检查，等于放弃审阅。
 
 ### 程序字段
 
@@ -924,7 +1040,9 @@ python -m unittest discover -s tests -v
 
 当前结果：
 
-- `122` 项测试通过，`12` 项跳过（缺少真实样本/编辑器）。
+- `153` 项测试通过，`12` 项跳过（缺少真实样本/编辑器）。
+- `examples/resources.plan.json`：`plan-lint: PASS`，`build` 原生校验
+  `PASS error_count=0`，`comments` 覆盖率 L1 7/7、L2 2/2。
 - 本机 LadEditor 2.37.0（2025 版）和
   `C:\Program Files (x86)\SYNTEC\MacroDev\Bin\LadDLL.dll`（2014 版）
   均可用。
@@ -1005,6 +1123,9 @@ syntec_lad/                    Python SDK、CLI、Schema 和内置数据
   inspection.py                记录/程序/网络检查
   lint.py                      .lad 静态规则
   plan_lint.py                 计划级合并审计
+  resources.py                 I/O/A/R 资源盘点（只出候选）
+  comments.py                  注释分级覆盖率
+  cloud.py                     Confluence 快照与降级状态
   patch.py                     哈希锁定变更
   remap.py                     同步地址重映射
   lad_diff.py                  段对齐差异
@@ -1015,6 +1136,10 @@ native/                        x86 LadDLL 校验辅助程序源码
 tools/lad_parser.py            独立旧版解析/反汇编交叉检查器
 references/                    原生工作流与工程知识库
 references/delivery-layout.md  MB/SB/package 固定目录结构
+references/resource-planning.md 资源盘点与人工确认流程
+references/comment-policy.md    注释分级规范
+references/confluence-verification.md 云端二次验证与降级
+references/snapshots/          Confluence 离线快照
 references/panming/            上游 MIT 知识快照
 examples/                      格式示例与回归夹具
 tests/                         unittest 测试
@@ -1030,4 +1155,4 @@ downloads/                     版本分发包与 SHA256
 - 本工具仅用于对自有或已获授权设备的离线梯形图分析与生成；不点击编辑器
   界面、不上传 CNC、不修改控制器。
 
-当前版本：`0.3.6p`。完整变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本：`0.3.7p`。完整变更见 [CHANGELOG.md](CHANGELOG.md)。

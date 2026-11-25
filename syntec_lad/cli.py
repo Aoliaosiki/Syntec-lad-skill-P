@@ -206,11 +206,84 @@ def _cmd_lint(args: argparse.Namespace) -> int:
     return 0 if result["ok"] else 1
 
 
+def _cmd_resources(args: argparse.Namespace) -> int:
+    from .resources import load_io_points, render_resources, resource_report
+
+    document = LadDocument.load(args.lad, encoding=args.encoding)
+    io_points = load_io_points(args.io) if args.io else None
+    result = resource_report(
+        document,
+        io_points=io_points,
+        io_path=args.io,
+        range_max=args.r_max,
+        path=str(Path(args.lad).resolve()),
+    )
+    output = Path(args.output) if args.output else None
+    if args.json:
+        _write_json(output, result)
+    else:
+        text = render_resources(result, format=args.format)
+        if output is None:
+            sys.stdout.write(text)
+        else:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(text, encoding="utf-8")
+    return 0 if result["ok"] else 1
+
+
+def _cmd_comments(args: argparse.Namespace) -> int:
+    from .comments import comment_coverage, render_comments
+
+    document = LadDocument.load(args.lad, encoding=args.encoding)
+    result = comment_coverage(document)
+    result["source"]["path"] = str(Path(args.lad).resolve())
+    output = Path(args.output) if args.output else None
+    if args.json:
+        _write_json(output, result)
+    else:
+        text = render_comments(
+            result,
+            limit=None if args.limit <= 0 else args.limit,
+        )
+        if output is None:
+            sys.stdout.write(text)
+        else:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(text, encoding="utf-8")
+    return 0
+
+
+def _cmd_cloud_status(args: argparse.Namespace) -> int:
+    from .cloud import cloud_status, render_cloud_status, scan_snapshots
+
+    snapshots = scan_snapshots(args.snapshots)
+    result = cloud_status(
+        snapshots,
+        online=args.online,
+        reason=args.reason,
+    )
+    output = Path(args.output) if args.output else None
+    if args.json:
+        _write_json(output, result)
+    else:
+        text = render_cloud_status(result)
+        if output is None:
+            sys.stdout.write(text)
+        else:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(text, encoding="utf-8")
+    return 0
+
+
 def _cmd_plan_lint(args: argparse.Namespace) -> int:
-    from .plan_lint import lint_plan, render_plan_lint
+    from .plan_lint import lint_change, lint_plan, render_plan_lint
 
     path = Path(args.plan)
-    result = lint_plan(_json_load(path), source_path=path.resolve())
+    document = _json_load(path)
+    if document.get("schema") == "syntec-lad-change/v1":
+        result = lint_change(document, source_path=path.resolve())
+    else:
+        result = lint_plan(document, source_path=path.resolve())
     output = Path(args.output) if args.output else None
     if args.json:
         _write_json(output, result)
@@ -229,6 +302,7 @@ def _cmd_plan_lint(args: argparse.Namespace) -> int:
 
 def _cmd_crosscheck(args: argparse.Namespace) -> int:
     from .crosscheck import crosscheck, render_crosscheck
+    from .cloud import cloud_status, compare_with_ladder, scan_snapshots
     from .delivery import resolve_inputs
 
     inputs = resolve_inputs(
@@ -251,6 +325,23 @@ def _cmd_crosscheck(args: argparse.Namespace) -> int:
             "root": inputs["delivery"]["root"],
             "layout": inputs["delivery"]["layout"],
         }
+    snapshots = scan_snapshots(args.snapshots) if args.snapshots else []
+    result["cloud"] = cloud_status(
+        snapshots,
+        online=bool(args.cloud_online),
+        reason=args.cloud_reason,
+    )
+    if snapshots:
+        from .crosscheck import ladder_usage
+
+        usage = ladder_usage(LadDocument.load(inputs["lad"]))
+        findings = compare_with_ladder(
+            set(usage["discrete"]),
+            {f"R{index}" for index in usage["registers"]},
+            snapshots,
+        )
+        result.setdefault("warnings", []).extend(findings)
+
     output = Path(args.output) if args.output else None
     if args.json:
         _write_json(output, result)
@@ -336,8 +427,20 @@ def _cmd_build(args: argparse.Namespace) -> int:
 
 
 def _cmd_patch(args: argparse.Namespace) -> int:
+    from .plan_lint import lint_change, render_plan_lint
+
     source_path = Path(args.lad).resolve()
     change = _json_load(Path(args.change))
+    check = lint_change(change, source_path=Path(args.change).resolve())
+    if not check["ok"] and not args.allow_unverified:
+        sys.stderr.write(
+            "refusing to patch: the change document failed the resource gate\n"
+        )
+        sys.stderr.write(render_plan_lint(check, limit=None))
+        sys.stderr.write(
+            "fix the entries, or re-run with --allow-unverified to override\n"
+        )
+        return 1
     document = LadDocument.load(source_path)
     result = apply_change_plan(document, change, return_result=True)
     assert isinstance(result, PatchResult)
@@ -574,7 +677,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="syntec-lad",
         description="Read, generate, patch, and validate Syntec MLCEdit .lad files.",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.3.6p")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.3.7p")
     sub = parser.add_subparsers(dest="command", required=True)
 
     lookup = sub.add_parser(
@@ -606,6 +709,64 @@ def build_parser() -> argparse.ArgumentParser:
         help="warn when one I/O point is used in this many networks (default 5)",
     )
     lint.set_defaults(func=_cmd_lint)
+
+    resources = sub.add_parser(
+        "resources",
+        aliases=["resource-report"],
+        help="inventory used/free I/O, A, C, S, TM, CT and R addresses with comments",
+    )
+    resources.add_argument("lad")
+    resources.add_argument("--encoding", default="auto", help="auto, big5, gb2312, or gb18030")
+    resources.add_argument("--io", help="IO table (.dat/.csv/.txt) to compare against")
+    resources.add_argument(
+        "--r-max",
+        type=int,
+        default=None,
+        help="highest R index to scan for free ranges (default 1023)",
+    )
+    resources.add_argument(
+        "--format",
+        choices=["md", "csv"],
+        default="md",
+        help="human-readable output format",
+    )
+    resources.add_argument("--json", action="store_true", help="emit JSON")
+    resources.add_argument("--output", help="write the report to this file")
+    resources.set_defaults(func=_cmd_resources)
+
+    comments = sub.add_parser(
+        "comments",
+        help="comment coverage by level: L1 interface points, L2 program headers, L3 long notes",
+    )
+    comments.add_argument("lad")
+    comments.add_argument("--encoding", default="auto")
+    comments.add_argument("--json", action="store_true", help="emit JSON")
+    comments.add_argument("--output", help="write the report to this file")
+    comments.add_argument(
+        "--limit",
+        type=int,
+        default=40,
+        help="max missing items to print (0 = all)",
+    )
+    comments.set_defaults(func=_cmd_comments)
+
+    cloud_status = sub.add_parser(
+        "cloud-status",
+        help="report Confluence verification level, snapshots, and offline degradation",
+    )
+    cloud_status.add_argument(
+        "--snapshots",
+        help="directory holding <page-id>.md snapshots pulled from Confluence",
+    )
+    cloud_status.add_argument(
+        "--online",
+        action="store_true",
+        help="set only after the agent actually read the page through Atlassian MCP",
+    )
+    cloud_status.add_argument("--reason", help="why the online check did not happen")
+    cloud_status.add_argument("--json", action="store_true", help="emit JSON")
+    cloud_status.add_argument("--output", help="write the report to this file")
+    cloud_status.set_defaults(func=_cmd_cloud_status)
 
     plan_lint = sub.add_parser(
         "plan-lint",
@@ -644,6 +805,16 @@ def build_parser() -> argparse.ArgumentParser:
     cross.add_argument("--json", action="store_true", help="emit JSON")
     cross.add_argument("--output", help="write the report to this file")
     cross.add_argument("--context", type=int, default=12, help="max items per section")
+    cross.add_argument(
+        "--snapshots",
+        help="Confluence snapshot directory; compares documented addresses with the ladder",
+    )
+    cross.add_argument(
+        "--cloud-online",
+        action="store_true",
+        help="set only after the agent read the pages through Atlassian MCP",
+    )
+    cross.add_argument("--cloud-reason", help="why online verification was not performed")
     cross.set_defaults(func=_cmd_crosscheck)
 
     discover = sub.add_parser(
@@ -700,6 +871,11 @@ def build_parser() -> argparse.ArgumentParser:
     patch.add_argument("output", nargs="?", help="output path; omit only with --in-place")
     patch.add_argument("--in-place", action="store_true", help="atomically replace the source and create a .bak")
     patch.add_argument("--no-native", action="store_true", help="skip the LadDLL syntax check")
+    patch.add_argument(
+        "--allow-unverified",
+        action="store_true",
+        help="apply even when resources still contain source=suggested or write read-only zones",
+    )
     patch.add_argument("--open", action="store_true", help="open the result in MLCEdit after validation")
     patch.add_argument("--editor", help="path to MLCEdit.exe")
     _add_native_options(patch)
@@ -782,3 +958,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -14,3 +14,6 @@ native/bin/*
 work/
 *.inspect.json
 *.diff.json
+
+# 本地 Confluence 站点信息（公开仓库不收录真实站点/cloudId/page id）
+references/confluence-local.md

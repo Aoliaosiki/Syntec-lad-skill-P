@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.7p - 2026-11-25
+
+### Added
+
+- `resources`（别名 `resource-report`）：盘点 `I/O/A/C/S/TM/CT/R` 的已用地址、
+  读/写次数、所属程序、现有注释、空闲候选、只读区告警，以及 IO 点表的
+  双向差集。只出候选，不分配地址。
+- `plan.resources`：可审阅的地址登记表（`addr`、`symbol`、`purpose`、
+  `permission`、`retain`、`owner`、`source`、`note`）。
+- `syntec-lad-change/v1` 支持同一 `resources` 段；`plan-lint` 识别 change
+  文档并只跑资源规则；`patch` 在应用前执行同一道门禁，失败即拒绝
+  （`--allow-unverified` 可覆盖）。
+- `plan-lint` 新增资源规则：`resource_unverified`、`resource_source_invalid`、
+  `resource_duplicate`、`resource_readonly_write`、`resource_missing`、
+  `resource_unused`。
+- `comments`：按 L1 接口点、L2 程序头、L3 长注释三级统计覆盖率；`lint` 只输出
+  一条汇总 info，不阻断。
+- `cloud-status` 与 `crosscheck --snapshots`：报告 Confluence 校验级别；
+  只有本地快照时为 `L1+`，完全没有证据时明确输出“未联网云端验证”。
+- `references/resource-planning.md`、`references/comment-policy.md`、
+  `references/confluence-verification.md`、`references/snapshots/README.md`。
+- MCP 新增 `resource_report`、`comment_coverage`、`confluence_status`。
+
+### Changed
+
+- 安全边界从「不自行分配」改为「只出可审阅的建议，人工确认后写入
+  `plan.resources`」；`source=suggested` 在生成前被硬拦。
+- `README.md` 补充新命令、资源字段和只读区说明。
+
+### Fixed（实测发现）
+
+- IO 点表写 `I000`、梯图解析成 `I0` 时，双向差集会把同一批点全部误报；
+  现在两侧都规范化后再比较。
+- 子程序头注释是 `ct=3` 而不是 `ct=1`，原判定把有头注释的子程序算作缺失；
+  现在 `ct=1` 和 `ct=3` 都算 L2 已覆盖。
+
+### Tests
+
+- 新增 `tests/test_resources.py`、`tests/test_comments.py`、
+  `tests/test_cloud.py`，并扩展 `tests/test_plan_lint.py`。
+- 全量 153 项通过，12 项跳过（缺真实样本/编辑器）。
+
 ## 0.3.6p - 2026-11-23
 
 ### Changed
@@ -155,7 +197,7 @@
 
 - 新增 `tests/test_diff.py`、`tests/test_lint.py`、`tests/test_crosscheck.py`、
   `tests/test_zhconv.py`，用例总数 65 → 91。
-- 真实交付验证：`crosscheck --delivery <MB 备份>` 与 1028 天樱交付（3191 记录）
+- 真实交付验证：`crosscheck --delivery <MB 备份>` 与 1028 某客户交付（3191 记录）
   均能跑通，1028 交付结果为 error 0 / warning 5 / info 80。
 
 ## 0.3.0p - 2026-11-19

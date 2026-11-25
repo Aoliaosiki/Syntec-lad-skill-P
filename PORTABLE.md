@@ -60,7 +60,10 @@ The MCP tools are:
 - `diff_lad`（段对齐 + 操作数级差异）
 - `lint_lad`（重复线圈 / S 当线圈 / I/O 复用 / 越界 / 简体注释 / 可合并条件）
 - `lint_plan`（生成前 DNF 合并审计 / 动作母线宽度 / 流程动作）
-- `crosscheck_lad`（参数表、三语、报警位、IO 表四项核对；可用 `delivery` 自动定位）
+- `crosscheck_lad`（参数表、三语、报警位、IO 表四项核对；可用 `delivery` 自动定位，`snapshots` 对照 Confluence 快照）
+- `resource_report`（已用/空闲地址盘点，只出候选不分配）
+- `comment_coverage`（L1 接口点 / L2 程序头 / L3 长注释）
+- `confluence_status`（云端校验级别与离线降级说明）
 - `read_reference`
 - `list_references`
 - `explain_capabilities`
