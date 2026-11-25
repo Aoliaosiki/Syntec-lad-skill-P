@@ -93,6 +93,10 @@ OPCODE_NAMES: dict[int, str] = {
     0x99: "OR",
     0xA5: "XOR",
     0xAB: "XOR",
+    0xB8: "AX RUN",
+    0xB9: "AX RUN",
+    0xBB: "AX STOP",
+    0xBC: "AX MOVE",
     0xC2: "TIM",
     0xC3: "TIM",
     0xC4: "TIM",
@@ -217,7 +221,9 @@ _REGISTER_BIT_RE = re.compile(r"^R(\d{1,5})\.(\d{1,2})$")
 _TIMER_RE = re.compile(r"^TM(\d{1,3})$")
 _COUNTER_RE = re.compile(r"^CT(\d{1,3})$")
 _REGISTER_RE = re.compile(r"^(@)?R(\d{1,5})$")
+_INDIRECT_REGISTER_RE = re.compile(r"^R@R(\d{1,5})$")
 _CONST_RE = re.compile(r"^#(-?\d{1,6})$")
+_AXIS_RE = re.compile(r"^AX(\d{1,5})$")
 
 
 @dataclass(frozen=True)
@@ -324,10 +330,39 @@ def parse_counter(value: str) -> EncodedOperand:
     return EncodedOperand("counter", raw=number)
 
 
-def parse_register(value: str, allow_indirect: bool = True) -> EncodedOperand:
-    match = _REGISTER_RE.fullmatch(value.upper())
+def parse_axis(value: str) -> EncodedOperand:
+    """Parse an ``AXn`` PLC-axis operand.
+
+    The wire value is the axis number, not an index.  The tool deliberately
+    does not invent a controller-specific upper bound: whether ``AXn`` exists
+    depends on the machine's Pr21~ axis configuration, which must be confirmed
+    by the user before generation.
+    """
+
+    match = _AXIS_RE.fullmatch(value.strip().upper())
     if not match:
-        raise LadValidationError(f"invalid register '{value}'; expected R0000")
+        raise LadValidationError(f"invalid axis '{value}'; expected AX1..AX65535")
+    number = int(match.group(1))
+    if not 1 <= number <= 65535:
+        raise LadValidationError(f"axis number out of range: {value}")
+    return EncodedOperand("device_lead", raw=number)
+
+
+def parse_register(value: str, allow_indirect: bool = True) -> EncodedOperand:
+    text = value.strip().upper()
+    indirect_match = _INDIRECT_REGISTER_RE.fullmatch(text)
+    if indirect_match:
+        if not allow_indirect:
+            raise LadValidationError(f"indirect register not allowed here: {value}")
+        number = int(indirect_match.group(1))
+        if number > 65535:
+            raise LadValidationError(f"register index out of range: {value}")
+        return EncodedOperand("register", raw=number, indirect=True)
+    match = _REGISTER_RE.fullmatch(text)
+    if not match:
+        raise LadValidationError(
+            f"invalid register '{value}'; expected R0000 or R@R0000"
+        )
     indirect = bool(match.group(1))
     if indirect and not allow_indirect:
         raise LadValidationError(f"indirect register not allowed here: {value}")
@@ -398,6 +433,10 @@ def _write_operand(
         if operand.kind != "plc_bits":
             raise LadValidationError("expected PLC bit operand")
         struct.pack_into("<H", buf, offset, int(operand.raw or 0))
+    elif kind == "device_lead":
+        if operand.kind != "device_lead":
+            raise LadValidationError("expected axis operand")
+        struct.pack_into("<H", buf, offset, int(operand.raw or 0))
     else:
         raise LadUnsupportedError(f"unsupported operand kind: {kind}")
 
@@ -447,6 +486,8 @@ def encode_instruction_cell(
         _write_operand(buf, 2, op1, "timer")
     elif meta.op1_type == OPERAND_COUNTER and op1 is not None:
         _write_operand(buf, 2, op1, "counter")
+    elif meta.op1_type == OPERAND_DEVICE_LEAD and op1 is not None:
+        _write_operand(buf, 2, op1, "device_lead")
     elif op1 is not None:
         raise LadUnsupportedError(
             f"opcode 0x{raw_opcode:02X} does not accept the supplied first operand"
@@ -464,6 +505,8 @@ def encode_instruction_cell(
             _write_operand(buf, 4, op2, "timer")
         elif meta.op2_type == OPERAND_COUNTER and op2 is not None:
             _write_operand(buf, 4, op2, "counter")
+        elif meta.op2_type == OPERAND_DEVICE_LEAD and op2 is not None:
+            _write_operand(buf, 4, op2, "device_lead")
         elif meta.op2_type == OPERAND_STRING:
             pass
         elif meta.op2_type not in (OPERAND_NULL, OPERAND_STRING) and op2 is not None:

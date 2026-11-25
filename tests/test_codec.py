@@ -75,6 +75,8 @@ class CodecTests(unittest.TestCase):
         self.assertEqual(parse_plc_device("I511").raw, 511)
         self.assertEqual(parse_plc_device("O511").raw, 0x3FF)
         self.assertEqual(parse_plc_device("R0128.31").raw, 0x201F)
+        self.assertEqual(parse_register("R@R65535").raw, 65535)
+        self.assertTrue(parse_register("R@R65535").indirect)
         self.assertEqual(parse_register("@R65535").raw, 65535)
         self.assertTrue(parse_register("@R65535").indirect)
         self.assertEqual(parse_const("#-32768").raw, -32768)
@@ -102,12 +104,15 @@ class CodecTests(unittest.TestCase):
 
         indirect = encode_instruction_cell(
             0x72,
-            op1=parse_register("@R1"),
-            op2=parse_register("@R2"),
+            op1=parse_register("R@R1"),
+            op2=parse_register("R@R2"),
         )
         record = indirect.ljust(40, b"\x00")
         decoded = decode_cell(record, 0, encoding="gb2312")
-        self.assertEqual([item["value"] for item in decoded["operands"]], ["@R0001", "@R0002"])
+        self.assertEqual(
+            [item["value"] for item in decoded["operands"]],
+            ["R@R0001", "R@R0002"],
+        )
         self.assertEqual(indirect[6], 3)
 
     def test_structural_rows(self) -> None:

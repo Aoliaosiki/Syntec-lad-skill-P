@@ -53,7 +53,7 @@ server. See `mcp-config.example.json` and replace the path:
 The MCP tools are:
 
 - `inspect_lad`（支持 `program` / `network` 过滤）
-- `lookup_address`
+- `lookup_address`（C/S/R 地址、R 分区/权限/保持/位存取、`@` 公用变量到 R 的分段映射、`R@R` 间接寻址）
 - `build_plan`
 - `patch_lad`
 - `validate_lad`
@@ -85,6 +85,8 @@ The same folder can be used from any checkout:
 python .\scripts\run_syntec_lad.py --version
 python .\scripts\run_syntec_lad.py inspect .\source.lad
 python .\scripts\run_syntec_lad.py lookup C6
+python .\scripts\run_syntec_lad.py lookup R2050
+python .\scripts\run_syntec_lad.py lookup @108001
 ```
 
 ## Platform boundary

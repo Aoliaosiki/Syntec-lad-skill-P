@@ -1,0 +1,547 @@
+{
+  "schema": "syntec-lad-register-zones/v1",
+  "source": [
+    "SYNTEC CNC and PLC Interface (ZH-CN), 2024-05-16: R register allocation table",
+    "Confluence: IO&R value usage ranges; NS standard resource table; Macro变数规格 (public variable @ ranges and R mapping)"
+  ],
+  "notes": [
+    "plc_access 表示阶梯程序权限：readonly / readwrite / per_address。",
+    "per_address 表示该区权限逐条定义，不能整片判只读；写入前必须查接口说明或权限表。",
+    "retain 为 null 表示条件保持，具体条件写在 conditions / retain_note。",
+    "bit_access=false 表示不能用 Rxxx.y 形式取位。"
+  ],
+  "zones": [
+    {
+      "id": "R0-R39",
+      "start": 0,
+      "end": 39,
+      "name": "CNC 系统接口区",
+      "owner": "system",
+      "plc_access": "per_address",
+      "macro_access": "readonly",
+      "bit_access": true,
+      "retain": false,
+      "purpose": "CNC 与 PLC 的系统级接口，如模式、坐标、主轴、轴群等；每个地址含义不同。",
+      "conditions": [],
+      "notes": [
+        "不是用户区，不要拿来做中间变量或累计值。",
+        "写入前必须逐条查接口说明；例如 R38 由 C25~C28 设定机械坐标时写入。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R40-R49",
+      "start": 40,
+      "end": 49,
+      "name": "PLC 警报讯息区",
+      "owner": "system",
+      "plc_access": "readwrite",
+      "macro_access": "readonly",
+      "bit_access": true,
+      "retain": false,
+      "purpose": "PLC 报警/警告讯息，前 16 位为警报，之后为警告；报警位由阶梯程序写入。",
+      "conditions": [],
+      "notes": [
+        "报警就写这一段，不要自己另找 R 区。",
+        "有警报时 S41 会 ON（仅部分 WinCE 系统）。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R50-R80",
+      "start": 50,
+      "end": 80,
+      "name": "使用者自定义（掉电不保持）",
+      "owner": "user",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": true,
+      "retain": false,
+      "purpose": "短生命周期的临时数值、过程计数、HMI 交换值；断电后清零。",
+      "conditions": [],
+      "notes": [
+        "需要跨断电记住的参数或累计值不要放这里。",
+        "标准包常用：R55~R56 ROT 刀库、R61~R64 工位启动、R65~R68 第二轴群 M 码、R76~R78 信号常开常闭转换。"
+      ],
+      "source": "PLC interface manual + Confluence IO&R usage ranges"
+    },
+    {
+      "id": "R81-R100",
+      "start": 81,
+      "end": 100,
+      "name": "MLC 系统参数 3401~3420",
+      "owner": "user",
+      "plc_access": "readonly",
+      "macro_access": "readonly",
+      "bit_access": true,
+      "retain": true,
+      "purpose": "操作员参数窗口；系统参数 Pr3401~Pr3420 单向写入这里，阶梯只读。",
+      "conditions": [],
+      "notes": [
+        "映射关系：R(n) = 3401 + (n - 81)。",
+        "要让一套梯形图适配不同机床，把油泵时长、间隔、次数等放这里，程序读 R81~R100。",
+        "阶梯写它无效；需要程序内部记忆的数值放 R103 以后。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R101-R102",
+      "start": 101,
+      "end": 102,
+      "name": "刀具状态（储存于 IO 卡）",
+      "owner": "system",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": true,
+      "retain": true,
+      "purpose": "刀具状态数据，掉电保持，存放在 IO 卡。",
+      "conditions": [],
+      "notes": [
+        "不要当通用用户区；刀具相关逻辑先查现有程序是否已占用。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R103-R255",
+      "start": 103,
+      "end": 255,
+      "name": "使用者自定义（掉电保持）",
+      "owner": "user",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": true,
+      "retain": true,
+      "purpose": "需要跨断电记住的数值，如累计产量、配方号、标定值。",
+      "conditions": [
+        "铣床：R103~R192 对应刀号数据 T1~T90，不要占用。",
+        "车床：R103~R192 可作为用户区，但仍要先查现有程序。"
+      ],
+      "notes": [
+        "R103~R255 储存于 IO 卡。",
+        "优先用 R193~R255 存新增长期数值，避开刀号段。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R256-R511",
+      "start": 256,
+      "end": 511,
+      "name": "使用者自定义（掉电不保持，可位存取）",
+      "owner": "user",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": true,
+      "retain": false,
+      "purpose": "临时数值和位标志；可位存取，但断电后清零。",
+      "conditions": [],
+      "notes": [
+        "可以写 R300.0，但中间标志优先用 A 位，语义更清楚。",
+        "标准包常用：R400 回原点完成旗标、R401 下料台有料暂停。"
+      ],
+      "source": "PLC interface manual 1-1.4.4 + Confluence IO&R usage ranges"
+    },
+    {
+      "id": "R512-R639",
+      "start": 512,
+      "end": 639,
+      "name": "CNC 系统接口区（可位存取）",
+      "owner": "system",
+      "plc_access": "per_address",
+      "macro_access": "readonly",
+      "bit_access": true,
+      "retain": false,
+      "purpose": "轴群、手轮、提示讯息、网络与警报等系统接口；权限逐条定义。",
+      "conditions": [],
+      "plc_access_exceptions": [
+        [520, 520],
+        [522, 525],
+        [590, 599],
+        [603, 603]
+      ],
+      "notes": [
+        "已知阶梯可写：R520、R522~R525 轴群命令；R590~R599 提示讯息；R603 禁止轴移动。",
+        "已知阶梯只读：R512~R517 网络与警报、R521 轴群状态、R526 单节剩余距离。",
+        "逐条权限见 references/panming/R512-R1023-权限表.md。"
+      ],
+      "source": "PLC interface manual 1-1.4.4 + R512-R1023 permission table"
+    },
+    {
+      "id": "R640-R1023",
+      "start": 640,
+      "end": 1023,
+      "name": "CNC 系统接口区（不可位存取）",
+      "owner": "system",
+      "plc_access": "per_address",
+      "macro_access": "readonly",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "手轮倍率、合成进给、工作数、累计时间等系统接口；权限逐条定义。",
+      "conditions": [],
+      "plc_access_exceptions": [
+        [641, 656],
+        [831, 840]
+      ],
+      "notes": [
+        "整片不能用 Rxxx.y；编辑器不认 R700.0 这种写法。",
+        "已知阶梯可写：R641~R656 手轮倍率、R831~R840 MLC 参数。",
+        "R1000 总工作数、R1002 需求工作数、R1013/R1014 累计时间由系统维护，阶梯只读。"
+      ],
+      "source": "PLC interface manual 1-1.4.4 + R512-R1023 permission table"
+    },
+    {
+      "id": "R1024-R1032",
+      "start": 1024,
+      "end": 1032,
+      "name": "铣床自动分中/对刀占用（车床用户区）",
+      "owner": "user_conditional",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "铣床自动分中、自动对刀功能占用；车床可作为用户自定义区。",
+      "conditions": [
+        "铣床：先确认自动分中/对刀功能未使用。",
+        "车床：可作为用户区，但先查现有程序。"
+      ],
+      "notes": [
+        "不可位存取。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R1033-R2049",
+      "start": 1033,
+      "end": 2049,
+      "name": "使用者自定义（掉电不保持）",
+      "owner": "user",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "临时数值、HMI 交换、过程数据；断电后清零。",
+      "conditions": [],
+      "notes": [
+        "需要掉电保持的数值放 R6000~R7999 或 R10000~R10999。",
+        "标准包常用：R1053~R1083、R1600~R1630 NetPLC 接贴标机。"
+      ],
+      "source": "PLC interface manual + Confluence IO&R usage ranges"
+    },
+    {
+      "id": "R2050-R2090",
+      "start": 2050,
+      "end": 2090,
+      "name": "使用者自定义 / 多 M 码同时执行占用",
+      "owner": "user_conditional",
+      "plc_access": "readwrite",
+      "macro_access": "conditional",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "Pr3810=0 时为用户区；Pr3810=1 时由多个 M 码同时执行功能占用。",
+      "conditions": [
+        "Pr3810=0：用户自定义，可读写。",
+        "Pr3810=1：多 M 码同时执行功能占用；宏/人机界面只读，阶梯仍可读写。"
+      ],
+      "notes": [
+        "新建程序若要用这一段，必须在 plan.resources 的 note 写明 Pr3810 的值并确认。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R2091-R2099",
+      "start": 2091,
+      "end": 2099,
+      "name": "使用者自定义（掉电不保持）",
+      "owner": "user",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "临时数值、过程数据。",
+      "conditions": [],
+      "notes": [],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R2100-R3100",
+      "start": 2100,
+      "end": 3100,
+      "name": "使用者自定义 / 刀具管理占用",
+      "owner": "user_conditional",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": null,
+      "retain_note": "Pr3228=0 不保持；Pr3228=1 刀具管理占用时保持。",
+      "purpose": "Pr3228=0 时为用户区；Pr3228=1 时由刀具管理功能占用。",
+      "conditions": [
+        "Pr3228=0：用户自定义，可读写，不保持。",
+        "Pr3228=1：刀具管理功能占用，掉电保持。"
+      ],
+      "notes": [
+        "新建程序若要用这一段，必须在 plan.resources 的 note 写明 Pr3228 的值并确认。",
+        "已知 R3103 被履历追踪功能使用。"
+      ],
+      "source": "PLC interface manual 1-1.4.4 + Confluence NS resource table"
+    },
+    {
+      "id": "R3101-R4095",
+      "start": 3101,
+      "end": 4095,
+      "name": "使用者自定义（掉电不保持）",
+      "owner": "user",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "临时数值、过程数据。",
+      "conditions": [],
+      "notes": [
+        "标准包常用：R3132、R3150~R3151 急停校正 PLC 轴；R3501~R3502 工位启动；R4000~R4001 ROT 刀库。"
+      ],
+      "source": "PLC interface manual + Confluence IO&R usage ranges"
+    },
+    {
+      "id": "R4096-R5999",
+      "start": 4096,
+      "end": 5999,
+      "name": "CNC 系统接口区（不可位存取）",
+      "owner": "system",
+      "plc_access": "per_address",
+      "macro_access": "readonly",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "刀具、串口 G 码、文件类系统接口；权限逐条定义。",
+      "conditions": [],
+      "notes": [
+        "不是用户区。已知 R5801~R5803 刀具编号、R5990/R5991 CSV G 码、R5995/R5996 串口 G 码。",
+        "逐条权限查接口说明，不能整片判只读。"
+      ],
+      "source": "PLC interface manual 1-1.4.4 + Confluence NS resource table"
+    },
+    {
+      "id": "R6000-R7999",
+      "start": 6000,
+      "end": 7999,
+      "name": "使用者自定义（储存于 IO 卡，掉电保持）",
+      "owner": "user",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": true,
+      "purpose": "需要跨断电记住的数值；储存在 IO 卡。",
+      "conditions": [],
+      "notes": [
+        "不可位存取。",
+        "标准包常用：R6000~R6003 抓料/下料起终点、R6010~R6087 自定义尺寸板材、R7501~R7841 拉手/补板/铣台面 Macro。"
+      ],
+      "source": "PLC interface manual + Confluence IO&R usage ranges"
+    },
+    {
+      "id": "R8000-R8255",
+      "start": 8000,
+      "end": 8255,
+      "name": "CNC 系统接口区（宏可读写，阶梯只读）",
+      "owner": "system",
+      "plc_access": "readonly",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": true,
+      "purpose": "系统参数/扩充参数映射区；宏程序与人机界面可读写，阶梯程序只读。",
+      "conditions": [],
+      "notes": [
+        "Pr5001~Pr5500 对应 R8001~R8500；R8001~R8255 阶梯只读。",
+        "不要在阶梯里写这一段；需要从宏取值时读它。"
+      ],
+      "source": "PLC interface manual 1-1.4.4 + CNCKL-3327"
+    },
+    {
+      "id": "R8256-R9999",
+      "start": 8256,
+      "end": 9999,
+      "name": "CNC 系统接口区（只读）",
+      "owner": "system",
+      "plc_access": "readonly",
+      "macro_access": "readonly",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "系统保留与只读接口。",
+      "conditions": [],
+      "notes": [
+        "R9000~R9999 在部分版本为机器人使用区。",
+        "新建程序不要使用。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R10000-R10999",
+      "start": 10000,
+      "end": 10999,
+      "name": "CNC 系统加值应用记忆区",
+      "owner": "system-app",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": true,
+      "purpose": "系统加值应用的掉电保持记忆区，如中控、生产资讯、刀补模组。",
+      "conditions": [],
+      "notes": [
+        "不是空白用户区；先用 resource-report / 现有资料确认没有被应用占用。",
+        "R10050~R10099 常见中控 ini/CSV 路径；R10800 起为简易生产资讯。"
+      ],
+      "source": "PLC interface manual + Confluence NS resource table"
+    },
+    {
+      "id": "R11000-R14999",
+      "start": 11000,
+      "end": 14999,
+      "name": "CNC 系统接口区（只读）",
+      "owner": "system",
+      "plc_access": "readonly",
+      "macro_access": "readonly",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "系统接口；R15200 起在部分版本为中控使用。",
+      "conditions": [],
+      "notes": [
+        "新建程序不要使用。"
+      ],
+      "source": "PLC interface manual + Confluence CloudAgent notes"
+    },
+    {
+      "id": "R15000-R19999",
+      "start": 15000,
+      "end": 19999,
+      "name": "CNC 系统加值应用非记忆区",
+      "owner": "system-app",
+      "plc_access": "readwrite",
+      "macro_access": "readwrite",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "系统加值应用的临时数据区，掉电不保持。",
+      "conditions": [],
+      "notes": [
+        "同样可能被应用占用，使用前确认。"
+      ],
+      "source": "PLC interface manual 1-1.4.4"
+    },
+    {
+      "id": "R20000-R65535",
+      "start": 20000,
+      "end": 65535,
+      "name": "使用者自定义（宏只读，阶梯可读写）",
+      "owner": "user",
+      "plc_access": "readwrite",
+      "macro_access": "readonly",
+      "bit_access": false,
+      "retain": false,
+      "purpose": "大块用户区，适合 M 码映射、插件交换、工艺应用数据。",
+      "conditions": [],
+      "notes": [
+        "宏程序只能读，阶梯程序可读写。",
+        "不可位存取。",
+        "标准包常用：R20000~R20999 贴标 Plugin、R25000~R25165 M 码自定义、R60000~R65535 CADCAM 刀表。"
+      ],
+      "source": "PLC interface manual 1-1.4.4 + Confluence IO&R usage ranges"
+    }
+  ],
+  "bit_address_limit": 639,
+  "at_value_rules": [
+    {
+      "pattern": "@0",
+      "kind": "vacant",
+      "maps_to": "不对应 R",
+      "note": "空白 VACANT，不存放数值。"
+    },
+    {
+      "pattern": "@1~@400",
+      "kind": "variable",
+      "maps_to": "不对应 R",
+      "type": "Double",
+      "access": "R/W",
+      "retain": "Pr3811",
+      "note": "一般运算用公用变量，独立于 R 寄存器；关机后若要保持，需用 Pr3811 设定。"
+    },
+    {
+      "pattern": "@401~@655",
+      "kind": "r_mapped",
+      "maps_to": "R1~R255",
+      "offset": 400,
+      "type": "Long",
+      "access": "R/W",
+      "note": "R = @ - 400；例如 @401 = R1、@655 = R255。"
+    },
+    {
+      "pattern": "@656~@999",
+      "kind": "variable",
+      "maps_to": "不对应 R",
+      "type": "Double",
+      "access": "R/W",
+      "retain": true,
+      "note": "有记忆性公用变量，关机后仍存在；不是 R 寄存器。"
+    },
+    {
+      "pattern": "@1000",
+      "kind": "system",
+      "maps_to": "不对应 R",
+      "type": "Double",
+      "access": "R",
+      "note": "系统变数。10.114.x/10.116.x 请勿使用；10.118.56Z、10.118.60T、10.118.66M、10.118.70G、10.118.77 以后改为有记忆性变量。"
+    },
+    {
+      "pattern": "@1001~@1999",
+      "kind": "variable",
+      "maps_to": "不对应 R",
+      "type": "Double",
+      "access": "R/W",
+      "retain": true,
+      "note": "有记忆性公用变量，关机后仍存在；不是 R 寄存器。"
+    },
+    {
+      "pattern": "@10000~@14095",
+      "kind": "r_mapped",
+      "maps_to": "R0~R4095",
+      "offset": 10000,
+      "type": "Long",
+      "access": "R/W",
+      "note": "R = @ - 10000；例如 @10000 = R0、@14095 = R4095。"
+    },
+    {
+      "pattern": "@60000~@79999",
+      "kind": "extended",
+      "maps_to": "不对应 R",
+      "type": "Double",
+      "access": "R/W",
+      "retain": true,
+      "note": "扩充公用变量，需配合 No3813，且仅适用于 CE 系统；不是 R 寄存器。"
+    },
+    {
+      "pattern": "@100000~@165535",
+      "kind": "r_mapped",
+      "maps_to": "R0~R65535",
+      "offset": 100000,
+      "type": "Long",
+      "access": "R/W",
+      "note": "R = @ - 100000；例如 @108001 = R8001、@120000 = R20000、@165535 = R65535。"
+    }
+  ],
+  "at_writable_ranges": [
+    [50, 80],
+    [101, 511],
+    [1024, 4095],
+    [5800, 7999],
+    [10000, 10999],
+    [15000, 65535]
+  ],
+  "parameter_r_maps": [
+    {
+      "parameters": "Pr3401~Pr3420",
+      "registers": "R81~R100",
+      "note": "参数画面单向写入，阶梯只读。"
+    },
+    {
+      "parameters": "Pr5001~Pr5500",
+      "registers": "R8001~R8500",
+      "note": "R8001~R8255 阶梯只读，宏可读写。"
+    }
+  ]
+}

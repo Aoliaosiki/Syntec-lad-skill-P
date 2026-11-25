@@ -89,6 +89,40 @@ class CliTests(unittest.TestCase):
         self.assertEqual(knowledge.returncode, 0, knowledge.stderr)
         self.assertIn("knowledge-base", knowledge.stdout)
 
+    def test_lookup_explains_register_zone_and_at_mapping(self) -> None:
+        conditional = run_cli("lookup", "R2050")
+        self.assertEqual(conditional.returncode, 0, conditional.stderr)
+        self.assertIn("R2050-R2090", conditional.stdout)
+        self.assertIn("Pr3810", conditional.stdout)
+
+        bit = run_cli("lookup", "R700.0")
+        self.assertEqual(bit.returncode, 0, bit.stderr)
+        self.assertIn("不支持位存取", bit.stdout)
+
+        shared = run_cli("lookup", "@108001")
+        self.assertEqual(shared.returncode, 0, shared.stderr)
+        self.assertIn("R8001", shared.stdout)
+        self.assertIn("100000", shared.stdout)
+
+        low = run_cli("lookup", "@401")
+        self.assertEqual(low.returncode, 0, low.stderr)
+        self.assertIn("R1", low.stdout)
+        self.assertIn("@ - 400", low.stdout)
+
+        plain = run_cli("lookup", "@100")
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertIn("不对应 R", plain.stdout)
+        self.assertIn("Pr3811", plain.stdout)
+
+        indirect = run_cli("lookup", "@R100")
+        self.assertEqual(indirect.returncode, 0, indirect.stderr)
+        self.assertIn("间接寻址", indirect.stdout)
+
+        official = run_cli("lookup", "R@R61")
+        self.assertEqual(official.returncode, 0, official.stderr)
+        self.assertIn("R@R61", official.stdout)
+        self.assertIn("间接寻址", official.stdout)
+
     def test_build_inspect_validate_diff_and_in_place(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

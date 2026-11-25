@@ -149,6 +149,29 @@ class ResourceReportTests(unittest.TestCase):
         result = resource_report(document, path=str(EXAMPLES / "demo.lad"))
         self.assertGreater(result["summary"]["addresses_used"], 0)
 
+    def test_r_entries_carry_zone_and_summary(self) -> None:
+        document = compile_plan(
+            _plan(
+                [
+                    {
+                        "condition": {"always": True},
+                        "actions": [{"op": "MOV", "src": "#1", "dst": "R2100"}],
+                    }
+                ]
+            )
+        )
+        result = resource_report(document, path="<mem>")
+        entry = result["families"]["R"]["used"][0]
+        self.assertEqual(entry["addr"], "R2100")
+        self.assertEqual(entry["zone_id"], "R2100-R3100")
+        self.assertEqual(entry["owner"], "user_conditional")
+        self.assertFalse(entry["bit_access"])
+        zones = result["summary"]["register_zones"]
+        self.assertEqual(zones[0]["zone_id"], "R2100-R3100")
+        self.assertEqual(zones[0]["writes"], 1)
+        text = render_resources(result)
+        self.assertIn("R 分区占用", text)
+
 
 if __name__ == "__main__":
     unittest.main()

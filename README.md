@@ -1,6 +1,6 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.7p）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.8p）
 
-[![Version](https://img.shields.io/badge/version-0.3.7p-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.8p-blue)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-green)](pyproject.toml)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](README.md)
 
@@ -10,16 +10,18 @@
 - 用审阅过的 JSON 计划生成新梯形图，或用哈希锁定的变更修补现有文件。
 - 批量重映射 PLC 位地址，避免级联误替换。
 - 调用原厂 32 位 `LadDLL.dll` 做原生语法校验。
-- 内置新代 PLC 工程知识库：8 类元件、C/S/R 地址表、602 条地址索引、
-  12 个工艺模式，以及润滑/液压/排屑/刀库/M 码写法库。
+- 内置新代 PLC 工程知识库：8 类元件、C/S/R 地址表、R 分区与权限/保持/
+  位存取、`@` 公用变量到 R 的分段映射与 `R@R` 间接寻址、602 条地址索引、12 个工艺模式，
+  以及润滑/液压/排屑/刀库/M 码写法库。
 
 > **本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2 的优化版。**
-> 当前版本：`0.3.7p`，仓库：
+> 当前版本：`0.3.8p`（正式版，不含 PLC 轴生成），仓库：
 > [`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P)。
 > 本工具不会点击 LadEditor 界面，不会上传 CNC，也不会直接修改控制器。
 
 ## 目录
 
+- [0.3.8p 重点](#038p-重点)
 - [0.3.7p 重点](#037p-重点)
 - [0.3.6p 重点](#036p-重点)
 - [功能总览](#功能总览)
@@ -38,6 +40,46 @@
 - [常见问题](#常见问题)
 - [目录结构](#目录结构)
 - [版本与授权](#版本与授权)
+
+## 0.3.8p 重点
+
+### R 分区：先判断数据性质，再选区
+
+新增 `syntec_lad/data/register-zones.json` 和 `lookup` 的分区输出。查一个 R
+地址时，不只知道它叫什么，还能看到：归属（系统/用户/条件占用）、阶梯权限、
+宏/HMI 权限、是否掉电保持、能否位存取、条件区对应的 Pr 参数。
+
+```powershell
+python $LadCli lookup R2050
+python $LadCli lookup R2100
+python $LadCli lookup R700.0
+python $LadCli lookup @108001
+```
+
+同时把三套容易混淆的命名空间分开写清楚：
+
+- `R@R61`：**阶梯图间接寻址**，先读 R61 的值，再把它当作要访问的寄存器号；
+- `@108001`：**宏/HMI 公用变量**，按 `R = @ - 100000` 映射到 `R8001`；
+  但 `@` 不是全部对应 R：`@1~@400`、`@656~@1999`、`@60000~@79999`
+  都是独立变量，`@100` 不是 R100；
+- `#5001`：**宏变量**，不是 R5001。
+
+`resources` 现在会按 R 分区汇总占用；`plan-lint` 新增
+`r_system_write`、`r_bit_access_invalid`、`r_retain_mismatch`、
+`r_conditional_zone`。完整决策表见 `references/register-map.md`。
+
+### 八类元件 smoke 验证
+
+新增 `tests/test_elements.py`：同一份计划生成 `I/O/A/C/S/R/TM/CT` 八类元件。
+Python 回读 0 issue，原厂 `LadDLL.SyntaxCheck` 通过。该测试只证明格式/编辑器
+兼容，不代表真机动作安全。
+
+
+### 正式版不生成 PLC 轴
+
+`0.3.8p` 不生成 `AX MOVE` / `AX RUN` / `AX STOP`。带轴动作的计划会被
+`plan-lint` 报 `axis_not_supported`，`build` 直接拒绝。需要轴功能请使用
+Alpha 版，并先确认 `Pr21~`、轴群状态、四个连续寄存器和 `O####` 宏合同。
 
 ## 0.3.7p 重点
 
@@ -132,7 +174,7 @@ MacroDev 2014 版和 LadEditor 2.37.0 的 2025 版 DLL 都能通过原生校验�
 | 命令 | 作用 | 关键点 |
 | --- | --- | --- |
 | `inspect` | 查看编码、SHA256、程序边界、物理记录、注释、网络候选 | 支持 `--program` / `--network` 过滤 |
-| `build` | 从 `syntec-lad-plan/v1` 生成新 `.lad` | 默认做 Python 回读 + LadDLL 原生校验 |
+| `build` | 从 `syntec-lad-plan/v1` 生成新 `.lad` | 正式版不含轴，Alpha 版含三类轴动作；默认做 Python 回读 + LadDLL 原生校验 |
 | `patch` | 用 `syntec-lad-change/v1` 修补现有 `.lad` | 每个操作都锁定 `expected_sha256` |
 | `remap` | 同时替换 I/O、C/S/A 位和 R 寄存器位 | 避免 `I0→I400` 后又被 `I40→...` 误替换 |
 | `validate` | 解析回读并调用原生 `LadDLL.SyntaxCheck` | 输出 `parser: PASS` / `native: PASS` |
@@ -158,8 +200,8 @@ MacroDev 2014 版和 LadEditor 2.37.0 的 2025 版 DLL 都能通过原生校验�
   直接失败。缺少的地址和参数仍然必须先向用户确认。
 - `R81`~`R100`（系统参数窗口）、`R8000`~`R8255`（宏程序区）、`I`、`S`
   在阶梯程序里只读；对这些区写入会被 `resource_readonly_write` 拦下。
-- 不生成新的轴、RS232、Keyscan、文件系统、外部功能、Coord/Tool 或
-  FastPLC 记录。
+- 正式版不生成任何 PLC 轴记录；带轴计划会被 `axis_not_supported` 拒绝。
+- 不生成 RS232、Keyscan、文件系统、外部功能、Coord/Tool 或 FastPLC 记录。
 - 未知或高级记录必须逐字节保留。
 - `build` / `patch` 默认同时执行 Python 回读和 LadDLL 原生校验；任一失败
   都不应覆盖目标文件。
@@ -229,8 +271,7 @@ native  : PASS  error_count=0
 
 - 最新 GitHub Release：
   <https://github.com/Aoliaosiki/Syntec-lad-skill-P/releases/latest>
-- 仓库内分发包：`downloads/syntec-lad-skill-0.3.6p.zip`
-- SHA256：见 `downloads/syntec-lad-skill-0.3.6p.zip.sha256`
+- 仓库内历史分发包在 `downloads/`；当前版本请以 Releases 页为准。
 
 解压后把文件夹命名为 `syntec-lad`，放到对应 Agent 的 skills 目录。
 
@@ -460,6 +501,7 @@ python $LadCli lint .\file.lad --limit 0
 
 `error` 会让命令返回 1；`warning` / `info` 不阻断，但应逐条确认。
 
+
 ### `plan-lint`
 
 ```powershell
@@ -484,8 +526,10 @@ python $LadCli plan-lint .\plan.json --output .\plan-lint.json
 | `resource_missing` | warning | 用了 I/O/C/S 或 `R0~R255` 却没登记 |
 | `resource_unused` | info | 登记了但没有任何网络使用 |
 
-`plan-lint` 也接受 `syntec-lad-change/v1`：这时只跑资源规则，按
-`operations[].networks` 统计地址，输出里标 `Change: N operation(s)`。
+
+`plan-lint` 也接受 `syntec-lad-change/v1`：这时跑资源规则（Alpha 版还会跑
+轴规则），按 `operations[].networks` 统计地址，输出里标
+`Change: N operation(s)`。
 
 ### `resources`
 
@@ -498,7 +542,9 @@ python $LadCli resources .\cnc.lad --r-max 2047 --json
 
 输出每个族的已用地址、读/写次数、所属程序、现有注释、空闲候选，以及
 IO 点表的双向差集。**空闲候选不是分配结果**；新建和修改都必须由人确认后
-写入 `plan.resources`。详见 `references/resource-planning.md`。
+写入 `plan.resources`。R 地址还会附带分区、归属、阶梯/宏权限、保持和位存取，
+并按分区汇总占用。详见 `references/resource-planning.md` 和
+`references/register-map.md`。
 
 ### `comments`
 
@@ -566,13 +612,24 @@ python $LadCli crosscheck .\cnc.lad `
 python $LadCli lookup C6
 python $LadCli lookup C006 --json
 python $LadCli lookup R600.1
+python $LadCli lookup R2050
+python $LadCli lookup R700.0
+python $LadCli lookup @108001
+python $LadCli lookup @401
+python $LadCli lookup @100
+python $LadCli lookup R@R61
+python $LadCli lookup @R100
 python $LadCli lookup "M码" --limit 5
 python $LadCli lookup "润滑"
 python $LadCli lookup R99999 --addresses-only
 ```
 
-先查 602 条 C/S/R 地址索引；无命中时回落到 `references/` 全文检索，适合
-用“润滑”“刀库”“安全门”这类工艺词定位章节。
+先查 602 条 C/S/R 地址索引；R 地址会追加分区、权限、保持、位存取和条件 Pr
+说明；`@` 查询会按 Confluence《Macro变数规格》解释公用变量区段，只有
+`@401~@655`、`@10000~@14095`、`@100000~@165535` 会映射到 R；
+`R@R` 查询会解释阶梯图间接寻址（`@R` 是兼容别名，官方写法是 `R@R`）。
+无命中时回落到 `references/` 全文检索，适合用“润滑”“刀库”“安全门”这类
+工艺词定位章节。
 
 ### `zhconv`
 
@@ -666,10 +723,14 @@ python $LadCli open .\file.lad --wait
 | `permission` | 否 | `read` / `write` / `readwrite` |
 | `retain` | 否 | 是否掉电保持 |
 | `owner` | 否 | 归属程序或功能 |
-| `note` | 否 | 现场差异、选配说明 |
+| `note` | 否 | 现场差异、选配说明；条件占用区必须写明 Pr 条件 |
 
 `source=suggested` 是唯一会让 `plan-lint` 失败的值：它表示「模型建议、
 还没人确认」。把 `suggested` 批量改成 `user` 来绕过检查，等于放弃审阅。
+
+条件占用区的 `note` 必须能判断启用条件：`R2050~R2090` 写 `Pr3810=0/1`，
+`R2100~R3100` 写 `Pr3228=0/1`，`R1024~R1032` 写铣床自动分中/对刀或车床用户区。
+缺条件时 `plan-lint` 报 `r_conditional_zone`。
 
 ### 程序字段
 
@@ -727,7 +788,9 @@ python $LadCli open .\file.lad --wait
 {"op": "MSG", "target": "ALM001"}
 ```
 
-`CNTRESET` 不接受非零预置值。`TIM` 的单位支持 `1ms`、`10ms`、`100ms`、`1s`。
+
+正式版不接受轴动作。带 `AXMOVE` / `AXRUN` / `AXSTOP` 的计划会报
+`axis_not_supported`；需要轴功能请使用 Alpha 版。
 
 ### 同条件多动作
 
@@ -985,6 +1048,7 @@ python .\scripts\run_syntec_lad.py inspect .\source.lad
 | 需要 | 读取 |
 | --- | --- |
 | 地址类别、C/S/R 表、权限 | `references/panming/address-map.md` |
+| R 分区、保持、位存取、`@`/`R@R` | `references/register-map.md` |
 | 精确地址查询 | `python $LadCli lookup <address>` |
 | 触点/线圈/定时/计数/比较/流程语法 | `references/panming/element-grammar.md` |
 | 12 个常用回路 | `references/panming/patterns.md` |
@@ -996,6 +1060,7 @@ python .\scripts\run_syntec_lad.py inspect .\source.lad
 | 完整操作码/格式附录 | `references/panming/TECHNICAL.md` |
 | 原生计划/变更工作流 | `references/workflow.md` |
 | MB/SB/package 备份结构 | `references/delivery-layout.md` |
+
 
 知识层用于选结构和查地址；写入仍必须走 `inspect` → 计划/变更 →
 `build`/`patch` → 回读 + 原生校验。
@@ -1040,7 +1105,7 @@ python -m unittest discover -s tests -v
 
 当前结果：
 
-- `153` 项测试通过，`12` 项跳过（缺少真实样本/编辑器）。
+- 公开构建跑完整测试套件；轴测试不包含在正式版。
 - `examples/resources.plan.json`：`plan-lint: PASS`，`build` 原生校验
   `PASS error_count=0`，`comments` 覆盖率 L1 7/7、L2 2/2。
 - 本机 LadEditor 2.37.0（2025 版）和
@@ -1050,6 +1115,10 @@ python -m unittest discover -s tests -v
 - `examples/mvp.lad`：`native: PASS error_count=0`。
 - 混合 `TIM+OUT` 同条件布局：`native: PASS error_count=0`。
 - 9 触点条件驱动双线圈：`native: PASS error_count=0`。
+- 八类元件 `I/O/A/C/S/R/TM/CT`：Python 回读 0 issue，原厂
+  `LadDLL.SyntaxCheck` 通过；轴动作会被明确拒绝。
+- R 分区表覆盖 `R0~R65535` 无空洞；`R2050`/`R2100`/`R700.0`/`@108001`
+  的查询与 `plan-lint` 规则均有单元测试。
 - `LadDLL.dll` 和 `MLCEdit.exe` 的自定义盘符安装目录可由兜底搜索自动定位。
 
 真实样本测试可指定：
@@ -1155,4 +1224,4 @@ downloads/                     版本分发包与 SHA256
 - 本工具仅用于对自有或已获授权设备的离线梯形图分析与生成；不点击编辑器
   界面、不上传 CNC、不修改控制器。
 
-当前版本：`0.3.7p`。完整变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本：`0.3.8p`。完整变更见 [CHANGELOG.md](CHANGELOG.md)。

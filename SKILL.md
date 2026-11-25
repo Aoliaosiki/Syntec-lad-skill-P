@@ -1,6 +1,6 @@
 ---
 name: syntec-lad
-description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; also covers I/O/register resource planning with human-confirmed plan.resources, graded comment coverage, and optional Confluence cross-verification with explicit offline degradation; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
+description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, R register zones with owner/permission/retain/bit-access/Pr conditions, piecewise @ global-variable to R mapping (@1~@400 is not R1~R400) and R@R indirect-addressing rules, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; also covers I/O/register resource planning with human-confirmed plan.resources, graded comment coverage, and optional Confluence cross-verification with explicit offline degradation; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
 metadata:
   short-description: Edit, validate, and design Syntec .lad ladder logic safely
 ---
@@ -29,6 +29,12 @@ interlock relationship.
 - Remap PLC bit/register addresses without cascading replacements.
 - Diff two ladders and run Python readback plus native LadDLL validation.
 - Look up a known C/S/R address or search the bundled engineering index.
+- Explain an R register's zone, owner, ladder/macro permission, retain flag,
+  bit-access limit, and conditional Pr requirement.
+- Explain the difference between ladder `R@R` indirect addressing, macro `@`
+  global variables, and `#` macro variables.
+- Reject PLC-axis generation explicitly; use the Alpha edition for `AX MOVE`,
+  `AX RUN`, and `AX STOP`.
 - Translate a requested process into a reviewed ladder structure using the
   knowledge references.
 
@@ -38,8 +44,9 @@ interlock relationship.
   writable source. The native `.lad` is the only writable ladder source.
 - Do not click the editor UI, upload to a CNC, or modify a controller.
 - Do not guess record boundaries, addresses, presets, or interlock logic.
-- Do not generate new axis, RS232, Keyscan, filesystem, external-function,
-  Coord/Tool, or FastPLC records. Preserve unknown records byte-for-byte.
+- Do not generate PLC-axis records at all. Do not generate RS232, Keyscan,
+  filesystem, external-function, Coord/Tool, or FastPLC records. Preserve
+  unknown records byte-for-byte.
 
 ## Run the bundled CLI
 
@@ -100,6 +107,7 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
 2. **Consult the knowledge layer.**
 
    - Address class, write authority, C/S/R meaning: `references/panming/address-map.md`
+   - R zone choice, retain, bit access, `@`/`R@R` mapping: `references/register-map.md`
    - Exact C/S/R lookup: `python $LadCli lookup C6` or `references/panming/address-index.md`
    - Contacts, coils, timers, counters, compare, flow: `references/panming/element-grammar.md`
    - Common circuits: `references/panming/patterns.md`
@@ -109,6 +117,10 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    - R512~R1023 permissions: `references/panming/R512-R1023-权限表.md`
 
    Use `references/knowledge-map.md` to choose the smallest relevant file.
+
+   For any `R` address, run `lookup` before deciding. It reports the zone,
+   whether the ladder may write it, whether it survives power-off, whether
+   `Rxxx.y` is legal, and which Pr condition applies to conditional zones.
 
 3. **Plan resources before drawing, for new files and edits alike.**
 
@@ -127,6 +139,11 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    relationship. Do not substitute a plausible-looking address. See
    `references/resource-planning.md`.
 
+   For conditional R zones, the `note` must state the enabling condition:
+   `R2050~R2090` → `Pr3810=0/1`; `R2100~R3100` → `Pr3228=0/1`;
+   `R1024~R1032` → milling auto-centering/tool-setter or lathe user area.
+   `plan-lint` reports `r_conditional_zone` when it is missing.
+
    In parallel, state the cloud evidence level:
 
    ```powershell
@@ -135,6 +152,10 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
 
    If Atlassian MCP is unavailable, say `未联网云端验证` explicitly. See
    `references/confluence-verification.md`.
+
+   This edition does not generate PLC-axis actions. If the request needs
+   `AX MOVE`, `AX RUN`, or `AX STOP`, stop and tell the user to use the Alpha
+   edition.
 
 4. **Select and adapt a structure.** If the request matches a pattern or
    function-library section, adapt the structure, not the machine-specific
@@ -422,6 +443,7 @@ question marks under cp950.
 | I/O、A、R 资源盘点与人工确认 | `references/resource-planning.md` |
 | 注释分级：什么必须写、什么不必写 | `references/comment-policy.md` |
 | Confluence 二次验证与离线降级 | `references/confluence-verification.md` |
+
 
 ## Native setup
 

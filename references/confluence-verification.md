@@ -7,7 +7,7 @@
 > 内部部署时在自己的本地副本里填入真实值，或让 agent 从客户端 MCP 配置里取，
 > **不要把真实站点信息提交回公开仓库**。
 >
-> 本地真实值的存放位置：`references/confluence-local.md`（已在 `.gitignore` 中）。
+> 本地真实值的存放位置：私有文件 `confluence-local.md`（已在 `.gitignore` 中）。
 > 该文件不存在时，agent 只能靠已连接的 MCP 现场探测，探测失败就按 L1 降级。
 
 ---
@@ -65,7 +65,7 @@ getConfluenceContent(
 
 ### 第 4 步：落成本地快照
 
-抓到页面后写 `references/snapshots/<page-id>.md`，头部固定格式：
+抓到页面后写到 `references/snapshots/`，文件名用页面 ID，头部固定格式：
 
 ```markdown
 # 页面标题

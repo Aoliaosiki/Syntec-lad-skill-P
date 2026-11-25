@@ -81,6 +81,10 @@ python scripts/run_syntec_lad.py resources cnc.lad --format csv --output 现状.
 | `resource_source_invalid` | error | `source` 不在枚举里 |
 | `resource_duplicate` | error | 同一地址登记两次 |
 | `resource_readonly_write` | error | 写了只读区 |
+| `r_bit_access_invalid` | error | 写了 `R640+` 的位，如 `R700.0` |
+| `r_retain_mismatch` | error / warning | `retain` 标记与 R 分区不一致 |
+| `r_system_write` | warning | 写逐条定义的系统接口区，且不在已知可写例外内 |
+| `r_conditional_zone` | warning | 用条件占用区但没在 note 写明 Pr 条件 |
 | `resource_missing` | warning | 用了 `I/O/C/S` 或 `R0~R255` 却没登记 |
 | `resource_unused` | info | 登记了但没用到 |
 
@@ -105,21 +109,28 @@ python scripts/run_syntec_lad.py resources cnc.lad --format csv --output 现状.
 
 ### 3.3 `R` 数值寄存器
 
-| 区段 | 阶梯程序权限 | 用途 |
+完整分区、权限、保持、位存取和 `@` 映射见 `register-map.md`；
+机器可读版本在 `syntec_lad/data/register-zones.json`。
+
+先按数据性质选区：
+
+| 想存什么 | 首选 | 说明 |
 |---|---|---|
-| `R0~R79` | 依手册定义 | CNC 系统接口 |
-| `R40~R49` | 按定义 | PLC 报警讯息 |
-| `R81~R100` | **只读** | 系统参数 3401~3420 |
-| `R103~R192` | 读写 | 铣床刀号数据 T1~T90 |
-| `R193~R255` | 读写、掉电保持 | 需要跨断电记住的数值 |
-| `R256~R511` | 读写、掉电不保持 | 可位存取 |
-| `R8000~R8255` | **只读** | 宏程序读写区 |
+| 中间标志 | `A0~A511` | 不要用 `Rxx.y` 代替 A |
+| 操作员参数 | `R81~R100` | 对应 Pr3401~3420，阶梯只读 |
+| 掉电保持数值 | `R193~R255`、`R6000~R7999`、`R10000~R10999` | 避开刀号段和被应用占用的区 |
+| 临时数值 | `R50~R80`、`R256~R511`、`R1033~R2049`、`R3101~R4095` | 掉电不保持 |
+| 条件占用区 | `R2050~R2090`（Pr3810）、`R2100~R3100`（Pr3228） | note 必须写明条件 |
+| 大块用户区 | `R20000~R65535` | 宏只读，阶梯可读写 |
 
 规则：
 
+- 写 `R` 前先 `lookup R2050` 看分区，不要只看地址索引的描述；
 - 需要操作员改的参数，用 `R81~R100`，不要写死在程序里；
-- 需要跨断电记住的数值，用 `R193~R255`；
-- 不要因为「看着空」就复用 `R103~R192`，那是刀号区。
+- 需要跨断电记住的数值，用保持区；不要用 `R50~R80`；
+- 不要因为「看着空」就复用 `R103~R192`，那是刀号区；
+- `R640` 以上不能位存取；
+- `R512~R1023` 是逐条权限，不能整片判只读。
 
 ### 3.4 `C` / `S`
 
@@ -166,7 +177,9 @@ python scripts/run_syntec_lad.py resources cnc.lad --format csv --output 现状.
 
 - [ ] 这个 `I`/`O` 在 IO 点表里能查到吗？描述对得上吗？
 - [ ] 这个 `R` 的权限允许阶梯写吗？
-- [ ] 需要掉电保持的数值，放的是 `R193~R255` 吗？
+- [ ] 需要掉电保持的数值，放的是保持区吗？
+- [ ] 条件占用区（R2050~R2090、R2100~R3100）的 Pr 条件确认了吗？
+- [ ] 写的是 `R640+` 的位吗？（不允许）
 - [ ] `A` 位是否按功能连续、留了余量？
 - [ ] 旧程序里「看着空」的地址，是否确认过 HMI/宏没在用？
 - [ ] 每个 `C` 位的触发条件写清楚了吗？

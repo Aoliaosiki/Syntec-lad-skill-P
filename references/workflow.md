@@ -8,6 +8,7 @@
 不要凭记忆猜地址类别或工艺结构。先按任务读取最小必要的知识文件：
 
 - 地址类别、权限、C/S/R 含义：`panming/address-map.md`
+- R 分区、保持、位存取、条件 Pr、`@`/`R@R` 映射：`register-map.md`
 - 精确地址：`python $LadCli lookup C6` 或
   `panming/address-index.md`
 - 元件语法：`panming/element-grammar.md`
@@ -121,6 +122,9 @@ python .\tools\lad_parser.py .\source.lad --no-write
 `LAB`、`RTS`、`END` 由程序结构生成，不应作为普通动作手工拼接。`JMP` 和
 `JSR` 的目标必须是已声明的普通子程序名；不调用 `MAIN` 或未声明的局部
 `LAB`。`CNTRESET` 不接受非零预置值。
+
+正式版不生成 PLC 轴动作。带 `AXMOVE`/`AXRUN`/`AXSTOP` 的计划会被拒绝；
+需要轴功能时使用 Alpha 版。
 
 格式样例见 `examples/demo.plan.json` 和 `examples/mvp.plan.json`。其中的
 地址和预置值全部是占位示例。
@@ -254,7 +258,6 @@ $env:SYNTEC_LAD_EDITOR = 'C:\path\to\LadEditor\MLCEdit.exe'
 
 首版不生成以下新逻辑或新记录：
 
-- 轴控制
 - RS232
 - Keyscan
 - 文件系统
@@ -263,3 +266,5 @@ $env:SYNTEC_LAD_EDITOR = 'C:\path\to\LadEditor\MLCEdit.exe'
 - FastPLC
 
 遇到这些记录时只做只读检查或逐字节保留，不要尝试重新编码。
+
+正式版不生成任何 PLC 轴记录；带轴计划会被 `axis_not_supported` 拒绝。

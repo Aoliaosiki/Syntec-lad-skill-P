@@ -14,6 +14,7 @@ entire knowledge base for a simple record inspection.
 
 | Task | Read first |
 |---|---|
+| Choose an R zone, check retain/bit access, or explain `@`/`R@R` | `register-map.md` |
 | Pick or verify an address | `panming/address-map.md` |
 | Look up a known C/S/R address | run `syntec-lad lookup <address>` or read `panming/address-index.md` |
 | Write a contact, coil, timer, counter, compare, or flow block | `panming/element-grammar.md` |
@@ -29,19 +30,22 @@ entire knowledge base for a simple record inspection.
 | Decide which elements need comments | `comment-policy.md` |
 | Verify against Confluence, or degrade when offline | `confluence-verification.md` |
 
+
 ## Required order before writing
 
 1. Run `inspect` on the native file. Do not infer record boundaries.
 2. Check the address class and write authority in `panming/address-map.md`.
+   For `R`, use `register-map.md` or run `lookup R2050` to get the zone,
+   owner, retain, bit-access, and conditional Pr requirements.
 3. If the request matches a known circuit, read the relevant pattern or
    function-library section.
 4. Ask for every missing I/O point, register, timer, counter, preset, and
    interlock relationship.
 5. Run `resources` on an existing file, or draft the resource table for a new
    one; record confirmed rows in `plan.resources`.
-6. Draft a reviewed JSON plan/change.
-7. Build or patch a new output and validate it with the native SDK.
-8. Run `comments` and state the Confluence evidence level.
+7. Draft a reviewed JSON plan/change.
+8. Build or patch a new output and validate it with the native SDK.
+9. Run `comments` and state the Confluence evidence level.
 
 ## Source hierarchy
 

@@ -1,5 +1,49 @@
 # Changelog
 
+
+## 0.3.8p - 2026-11-25
+
+### Added
+
+- `syntec_lad/data/register-zones.json`：R0~R65535 的机器可读分区表，字段包括
+  归属（system / system-app / user / user_conditional）、阶梯权限、宏/HMI
+  权限、位存取、掉电保持、用途、条件 Pr 和来源。
+- `syntec_lad/registers.py`：`describe_register`、`write_assessment`、
+  `register_zone`、`describe_at_value`。`lookup R2050` 现在输出分区、权限、
+  保持、位存取和条件；`lookup @108001` 按 `R = @ - 100000` 解释；
+  `lookup @401` 按 `R = @ - 400` 解释；`lookup @100` 明确说明它不对应 R；
+  `lookup @R100` 解释阶梯图间接寻址。
+- `references/register-map.md`：一页式选区决策表，区分阶梯 `@R` 间接寻址、
+  宏/HMI `@` 公用变量到 R 的分段映射（`@1~@400` 不映射 R）和 `#` 宏变量，
+  并给出润滑泵、M 码映射等规划示例。
+- `plan-lint` 新增 `r_system_write`、`r_bit_access_invalid`、
+  `r_retain_mismatch`、`r_conditional_zone`：写逐条定义的系统接口区、
+  `R640+` 取位、`retain` 标记与分区冲突、条件占用区缺少 Pr 说明时分别提示。
+- `resources` 为每个 R 地址附带分区/归属/权限/保持/位存取，并输出 R 分区占用
+  汇总；写系统接口区时按 `write_assessment` 分级告警。
+- `tests/test_registers.py`：分区覆盖、位存取、保持、条件区和 `@` 映射测试。
+- 正式版和 Alpha 版共用一套实现；正式版构建关闭轴生成，并裁掉 Alpha
+  文档与轴参考文件。
+
+### Fixed
+
+- 修正 `@` 公用变量映射：`@1~@400`、`@656~@1999`、`@60000~@79999`
+  不对应 R，不能把 `@100` 当成 R100。
+- 只有 `@401~@655`、`@10000~@14095`、`@100000~@165535` 映射 R；
+  公式分别是 `R = @ - 400`、`R = @ - 10000`、`R = @ - 100000`。
+- `@` 映射到 R 后的可写范围按手册收紧为
+  `R50~R80`、`R101~R511`、`R1024~R4095`、`R5800~R7999`、
+  `R10000~R10999`、`R15000~R65535`。
+- 正式版 `0.3.8p` 不生成 PLC 轴；带轴计划报 `axis_not_supported`，不再
+  静默接受。
+
+### Verified
+
+- 公开构建测试套件通过；轴测试不包含在正式版。
+- 八类元件 `I/O/A/C/S/R/TM/CT`  smoke：Python 回读 0 issue，原厂
+  `LadDLL.SyntaxCheck` 通过。
+- R 分区表覆盖 `R0~R65535` 无空洞；`@` 分段映射有专门单元测试。
+
 ## 0.3.7p - 2026-11-25
 
 ### Added

@@ -14,7 +14,14 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .compiler import _condition_dnf, _parse_condition_node
+from .edition import AXIS_GENERATION
 from .errors import LadError
+from .registers import (
+    describe_register,
+    parse_register,
+    register_zone,
+    write_assessment,
+)
 
 PLAN_LINT_SCHEMA = "syntec-lad-plan-lint/v1"
 
@@ -27,8 +34,11 @@ COIL_ACTIONS = {"OUT", "OUTI", "PLS", "PLF", "SET", "RST"}
 DATA_ACTIONS = {"MOV", "ADD", "SUB", "MUL", "DIV", "AND", "OR", "XOR"}
 TIMER_ACTIONS = {"TIM"}
 COUNTER_ACTIONS = {"CNTUP", "CNTDOWN", "CNTRESET", "CNTRINGUP", "CNTRINGDOWN"}
+AXIS_ACTIONS = {"AXMOVE", "AXRUN", "AXSTOP"}
 ADDR_TOKEN_RE = re.compile(r"@?\b(I|O|A|C|S|TM|CT)(\d{1,4})(?:\.(\d{1,2}))?\b")
 REG_TOKEN_RE = re.compile(r"@?\bR(\d{1,5})(?:\.(\d{1,2}))?\b")
+AXIS_TOKEN_RE = re.compile(r"^AX(\d{1,5})$")
+AXIS_MOVE_DATA_RE = re.compile(r"^R(\d{1,5})$")
 
 
 def _operand_key(operand: Any) -> tuple[Any, ...] | None:
@@ -127,7 +137,10 @@ def _issue(
 def _normalize(raw: Any) -> str | None:
     if raw is None:
         return None
-    text = str(raw).strip().replace("@", "").upper()
+    raw_text = str(raw).strip().upper()
+    if raw_text.startswith("R@R"):
+        raw_text = "R" + raw_text[3:]
+    text = raw_text.replace("@", "")
     if not text:
         return None
     match = REG_TOKEN_RE.fullmatch(text)
@@ -226,6 +239,26 @@ def _collect_networks(
             elif op in DATA_ACTIONS:
                 _touch(usage, action.get("src"), write=False, program=program, network=network_id)
                 _touch(usage, action.get("dst"), write=True, program=program, network=network_id)
+            elif op == "AXMOVE":
+                data = _normalize(action.get("data"))
+                if data and "." not in data:
+                    base = int(data[1:])
+                    for offset in range(4):
+                        _touch(
+                            usage,
+                            f"R{base + offset:04d}",
+                            write=False,
+                            program=program,
+                            network=network_id,
+                        )
+            elif op == "AXRUN":
+                _touch(
+                    usage,
+                    action.get("program"),
+                    write=False,
+                    program=program,
+                    network=network_id,
+                )
 
 
 def plan_usage(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -257,14 +290,154 @@ def change_usage(change: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return usage
 
 
+def _axis_issues(container: dict[str, Any]) -> list[dict[str, Any]]:
+    """Validate axis operands before generation.
+
+    The controller decides whether an axis exists, but these checks catch
+    malformed plans and values that the byte format can hold but the interface
+    cannot mean (program 0, a truncated AXMOVE data block, or a second AXSTOP
+    operand that would be silently ignored).
+    """
+
+    issues: list[dict[str, Any]] = []
+    groups: list[tuple[str, Any]] = []
+    programs = container.get("programs")
+    if isinstance(programs, list):
+        for program in programs:
+            if isinstance(program, dict):
+                groups.append(
+                    (str(program.get("name") or "?"), program.get("networks"))
+                )
+    operations = container.get("operations")
+    if isinstance(operations, list):
+        for index, operation in enumerate(operations, start=1):
+            if isinstance(operation, dict):
+                groups.append((f"OP{index}", operation.get("networks")))
+
+    for program, networks in groups:
+        if not isinstance(networks, list):
+            continue
+        for index, network in enumerate(networks, start=1):
+            if not isinstance(network, dict):
+                continue
+            network_id = f"N{index:04d}"
+            actions = network.get("actions")
+            if not isinstance(actions, list):
+                continue
+            for action in actions:
+                if not isinstance(action, dict):
+                    continue
+                op = str(action.get("op") or "").upper()
+                if op not in AXIS_ACTIONS:
+                    continue
+                if not AXIS_GENERATION:
+                    issues.append(
+                        _issue(
+                            "axis_not_supported",
+                            "error",
+                            f"{op} 是 Alpha 版专属动作；当前正式版不生成 PLC 轴，"
+                            "请改用 Alpha 版。",
+                            program=program,
+                            networks=[network_id],
+                        )
+                    )
+                    continue
+                axis_text = str(action.get("axis") or "").strip().upper()
+                match = AXIS_TOKEN_RE.fullmatch(axis_text)
+                axis_number = int(match.group(1)) if match else 0
+                if not match or not 1 <= axis_number <= 65535:
+                    issues.append(
+                        _issue(
+                            "axis_invalid",
+                            "error",
+                            f"{op} 的 axis={action.get('axis')!r} 非法；"
+                            "必须写成 AX1..AX65535，且轴号不能为 0",
+                            program=program,
+                            networks=[network_id],
+                        )
+                    )
+                if op == "AXSTOP":
+                    extra = [
+                        key
+                        for key in ("program", "data", "operand", "src", "dst")
+                        if key in action
+                    ]
+                    if extra:
+                        issues.append(
+                            _issue(
+                                "axis_stop_extra_operand",
+                                "error",
+                                "AXSTOP 只使用轴号；第二个操作数不会被控制器读取。"
+                                f"删除 {', '.join(extra)}",
+                                program=program,
+                                networks=[network_id],
+                            )
+                        )
+                elif op == "AXMOVE":
+                    data_text = str(action.get("data") or "").strip().upper()
+                    data_match = AXIS_MOVE_DATA_RE.fullmatch(data_text)
+                    if not data_match:
+                        issues.append(
+                            _issue(
+                                "axis_move_data_invalid",
+                                "error",
+                                f"AXMOVE 的 data={action.get('data')!r} 必须是"
+                                "直接寄存器 R0000；不接受 #常数 或 R@R 间接",
+                                program=program,
+                                networks=[network_id],
+                            )
+                        )
+                    elif int(data_match.group(1)) > 65532:
+                        issues.append(
+                            _issue(
+                                "axis_move_data_invalid",
+                                "error",
+                                f"AXMOVE 的 data={data_text} 需要连续 4 个寄存器，"
+                                "基址最大只能是 R65532",
+                                program=program,
+                                networks=[network_id],
+                            )
+                        )
+                elif op == "AXRUN":
+                    raw = str(action.get("program") or "").strip()
+                    if raw.startswith("#"):
+                        try:
+                            number = int(raw[1:])
+                        except ValueError:
+                            number = 0
+                        if not 1 <= number <= 9999:
+                            issues.append(
+                                _issue(
+                                    "axis_program_invalid",
+                                    "error",
+                                    f"AXRUN 的 program={raw!r} 必须是 #1..#9999"
+                                    "（对应 O0001~O9999）",
+                                    program=program,
+                                    networks=[network_id],
+                                )
+                            )
+                    elif not re.fullmatch(r"R\d{1,5}", raw.upper()):
+                        issues.append(
+                            _issue(
+                                "axis_program_invalid",
+                                "error",
+                                f"AXRUN 的 program={raw!r} 必须是 #1..#9999 "
+                                "或直接寄存器 R0000",
+                                program=program,
+                                networks=[network_id],
+                            )
+                        )
+    return issues
+
+
 def lint_change(
     change: dict[str, Any],
     *,
     source_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Resource checks for a change document (no merge audit)."""
+    """Axis and resource checks for a change document (no merge audit)."""
 
-    issues = _resource_issues(change, change_usage(change))
+    issues = _axis_issues(change) + _resource_issues(change, change_usage(change))
     counts = {"error": 0, "warning": 0, "info": 0}
     for item in issues:
         counts[item["severity"]] = counts.get(item["severity"], 0) + 1
@@ -285,7 +458,11 @@ def lint_change(
 def _resource_required(address: str) -> bool:
     match = REG_TOKEN_RE.fullmatch(address)
     if match:
-        return int(match.group(1)) <= 255
+        index = int(match.group(1))
+        if index <= 255:
+            return True
+        zone = register_zone(index)
+        return bool(zone and zone.get("owner") == "user_conditional")
     match = ADDR_TOKEN_RE.fullmatch(address)
     if not match:
         return False
@@ -307,15 +484,43 @@ def _readonly_reason(address: str) -> str | None:
     return None
 
 
+def _as_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().casefold()
+        if text in {"true", "yes", "1"}:
+            return True
+        if text in {"false", "no", "0"}:
+            return False
+    return None
+
+
+def _conditional_note_ok(index: int, note: str) -> bool:
+    zone = register_zone(index)
+    if zone is None or zone.get("owner") != "user_conditional":
+        return True
+    zone_id = str(zone.get("id") or "")
+    if zone_id == "R2050-R2090":
+        return "3810" in note
+    if zone_id == "R2100-R3100":
+        return "3228" in note
+    if zone_id == "R1024-R1032":
+        return any(
+            word in note
+            for word in ("车床", "铣床", "分中", "对刀", "lathe", "mill")
+        )
+    return True
+
+
 def _resource_issues(
     plan: dict[str, Any],
     usage: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     resources = plan.get("resources")
-    if resources is None:
-        return issues
-    if not isinstance(resources, list):
+    has_resources = resources is not None
+    if has_resources and not isinstance(resources, list):
         return [
             _issue(
                 "resources_invalid",
@@ -327,7 +532,8 @@ def _resource_issues(
         ]
 
     declared: dict[str, dict[str, Any]] = {}
-    for position, item in enumerate(resources, start=1):
+    resource_items = resources if isinstance(resources, list) else []
+    for position, item in enumerate(resource_items, start=1):
         if not isinstance(item, dict):
             issues.append(
                 _issue(
@@ -385,8 +591,119 @@ def _resource_issues(
             )
             continue
         declared[address] = item
+        parsed = parse_register(address)
+        if parsed is not None:
+            index, _bit = parsed
+            zone = register_zone(index)
+            declared_retain = _as_bool(item.get("retain"))
+            zone_retain = zone.get("retain") if zone else None
+            if declared_retain is True and zone_retain is False:
+                issues.append(
+                    _issue(
+                        "r_retain_mismatch",
+                        "error",
+                        f"{address} 标记 retain=true，但 {zone.get('name')} 掉电不保持；"
+                        "需要保持的数值请改用 R103~R255、R6000~R7999 或 R10000~R10999",
+                        program=None,
+                        networks=[],
+                    )
+                )
+            elif declared_retain is False and zone_retain is True:
+                issues.append(
+                    _issue(
+                        "r_retain_mismatch",
+                        "warning",
+                        f"{address} 标记 retain=false，但 {zone.get('name')} 实际掉电保持；"
+                        "若依赖断电清零，需要在上电时显式初始化",
+                        program=None,
+                        networks=[],
+                    )
+                )
+            if zone and zone.get("owner") == "user_conditional":
+                note = str(item.get("note") or "")
+                if not _conditional_note_ok(index, note):
+                    issues.append(
+                        _issue(
+                            "r_conditional_zone",
+                            "warning",
+                            f"{address} 位于条件占用区 {zone.get('name')}；"
+                            "plan.resources 的 note 必须写明启用条件"
+                            "（R2050~R2090 查 Pr3810，R2100~R3100 查 Pr3228）",
+                            program=None,
+                            networks=[],
+                        )
+                    )
         entry = usage.get(address)
-        if entry and entry["writes"] > 0:
+        if entry is None and has_resources:
+            issues.append(
+                _issue(
+                    "resource_unused",
+                    "info",
+                    f"{address} 在 resources 里声明了，但没有任何 network 使用",
+                    program=None,
+                    networks=[],
+                )
+            )
+
+    checked_bit: set[str] = set()
+    for address, entry in usage.items():
+        parsed = parse_register(address)
+        if parsed is not None:
+            index, bit = parsed
+            if bit is not None and address not in checked_bit:
+                info = describe_register(address)
+                if info is not None and not info["bit_access"]:
+                    checked_bit.add(address)
+                    issues.append(
+                        _issue(
+                            "r_bit_access_invalid",
+                            "error",
+                            info["bit_note"]
+                            or f"{address} 所在区不支持位存取",
+                            program=entry["programs"][0] if entry["programs"] else None,
+                            networks=entry["networks"],
+                        )
+                    )
+            if entry["writes"] > 0:
+                assessment = write_assessment(address)
+                if assessment["severity"] == "error":
+                    issues.append(
+                        _issue(
+                            "resource_readonly_write",
+                            "error",
+                            f"{address} 在 plan 里被写 {entry['writes']} 次，但 "
+                            f"{assessment['detail']}",
+                            program=entry["programs"][0] if entry["programs"] else None,
+                            networks=entry["networks"],
+                        )
+                    )
+                elif assessment["severity"] == "warning":
+                    zone = register_zone(index) or {}
+                    if zone.get("owner") == "user_conditional":
+                        if address not in declared:
+                            issues.append(
+                                _issue(
+                                    "r_conditional_zone",
+                                    "warning",
+                                    f"{address} 位于条件占用区 {zone.get('name')}，"
+                                    "但没有登记启用条件；先写进 plan.resources 并注明"
+                                    "Pr3810 / Pr3228 / 机型",
+                                    program=entry["programs"][0] if entry["programs"] else None,
+                                    networks=entry["networks"],
+                                )
+                            )
+                    else:
+                        issues.append(
+                            _issue(
+                                "r_system_write",
+                                "warning",
+                                f"{address} 在 plan 里被写 {entry['writes']} 次；"
+                                f"{assessment['detail']}",
+                                program=entry["programs"][0] if entry["programs"] else None,
+                                networks=entry["networks"],
+                            )
+                        )
+        elif entry["writes"] > 0:
             reason = _readonly_reason(address)
             if reason:
                 issues.append(
@@ -398,19 +715,9 @@ def _resource_issues(
                         networks=entry["networks"],
                     )
                 )
-        if entry is None:
-            issues.append(
-                _issue(
-                    "resource_unused",
-                    "info",
-                    f"{address} 在 resources 里声明了，但没有任何 network 使用",
-                    program=None,
-                    networks=[],
-                )
-            )
-
-    for address, entry in usage.items():
         if address in declared or not _resource_required(address):
+            continue
+        if not has_resources:
             continue
         issues.append(
             _issue(
@@ -564,6 +871,7 @@ def lint_plan(
             )
 
     usage = plan_usage(plan)
+    issues.extend(_axis_issues(plan))
     issues.extend(_resource_issues(plan, usage))
 
     counts = {"error": 0, "warning": 0, "info": 0}

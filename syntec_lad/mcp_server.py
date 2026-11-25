@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+from . import __version__
 from .address_db import default_address_db_path, lookup_address
 from .inspection import apply_inspection_filter, inspect_lad
 
@@ -52,8 +53,9 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "lookup_address",
         "description": (
-            "Look up a known C/S/R address or search the bundled 602-address "
-            "engineering index by Chinese/English keyword."
+            "Look up a known C/S/R address, an R register's zone/permission/"
+            "retain/bit-access facts, a macro @ resource value, or search the "
+            "bundled 602-address engineering index by Chinese/English keyword."
         ),
         "inputSchema": {
             "type": "object",
@@ -316,14 +318,25 @@ def _tool_inspect(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_lookup(args: dict[str, Any]) -> dict[str, Any]:
+    from .registers import describe_at_value, describe_register
+
     hits = lookup_address(
         str(args["query"]),
         limit=int(args.get("limit") or 20),
     )
+    query = str(args["query"])
+    query_upper = query.strip().upper()
+    is_indirect = query_upper.startswith("@R") or query_upper.startswith("R@R")
     return {
-        "query": args["query"],
+        "query": query,
         "count": len(hits),
         "hits": hits,
+        "register": None if is_indirect else describe_register(query),
+        "at_value": (
+            describe_at_value(query)
+            if is_indirect or query.strip().startswith("@")
+            else None
+        ),
         "database": str(default_address_db_path()),
     }
 
@@ -521,7 +534,7 @@ def _dispatch(method: str, params: dict[str, Any]) -> Any:
         return {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "syntec-lad", "version": "0.3.7p"},
+            "serverInfo": {"name": "syntec-lad", "version": __version__},
         }
     if method == "ping":
         return {}

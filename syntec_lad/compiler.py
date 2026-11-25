@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .edition import AXIS_GENERATION
 from .errors import LadUnsupportedError, LadValidationError
 from .model import LadDocument, encode_comment
 from .opcodes import (
@@ -23,6 +24,7 @@ from .opcodes import (
     make_line_cell,
     make_nop_cell,
     make_structural_row,
+    parse_axis,
     parse_contact_device,
     parse_counter,
     parse_plc_device,
@@ -295,6 +297,50 @@ def _parse_action(action: Any) -> Action:
     if op in COIL_OPCODES:
         operand = parse_plc_device(str(action.get("operand", "")))
         return Action(op, COIL_OPCODES[op], operand, None, action_slot=9, width=1)
+    if op in ("AXMOVE", "AXRUN", "AXSTOP"):
+        if not AXIS_GENERATION:
+            raise LadValidationError(
+                f"{op} is an Alpha-edition action; this edition rejects PLC-axis "
+                "generation. Use the Alpha edition."
+            )
+        axis = parse_axis(str(action.get("axis", "")))
+        if op == "AXSTOP":
+            extra = [
+                key
+                for key in ("program", "data", "operand", "src", "dst")
+                if key in action
+            ]
+            if extra:
+                raise LadValidationError(
+                    "AXSTOP only takes an axis; its second operand is ignored "
+                    "by the controller, so do not encode a stop condition"
+                )
+            return Action(op, 0xBB, axis, None, action_slot=8, width=2)
+        if op == "AXMOVE":
+            data = parse_register(str(action.get("data", "")), allow_indirect=False)
+            base = int(data.raw or 0)
+            if base > 65532:
+                raise LadValidationError(
+                    "AXMOVE data base must leave four consecutive registers "
+                    f"(R{base} needs R{base}..R{base + 3})"
+                )
+            return Action(op, 0xBC, axis, data, action_slot=8, width=2)
+        if "program" not in action:
+            raise LadValidationError("AXRUN requires program (O0001~O9999)")
+        program = classify_value(str(action.get("program", "")))
+        if program.kind == "const":
+            number = int(program.raw or 0)
+            if not 1 <= number <= 9999:
+                raise LadValidationError(
+                    f"AXRUN program number must be 1..9999, got {number}"
+                )
+            return Action(op, 0xB8, axis, program, action_slot=8, width=2)
+        if program.indirect:
+            raise LadValidationError(
+                "AXRUN register program number must be a direct register; "
+                "indirect R@R is not documented for PROG_IDX"
+            )
+        return Action(op, 0xB9, axis, program, action_slot=8, width=2)
     if op == "TIM":
         timer = parse_timer(str(action.get("timer", "")))
         unit = str(action.get("unit", "100ms")).lower().replace(" ", "")

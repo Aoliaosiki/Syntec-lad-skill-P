@@ -19,6 +19,10 @@ from typing import Any, Iterable
 
 from .inspection import inspect_document
 from .model import LadDocument
+from .registers import (
+    describe_register,
+    write_assessment,
+)
 
 RESOURCE_SCHEMA = "syntec-lad-resources/v1"
 
@@ -140,7 +144,7 @@ def _new_entry(address: str) -> dict[str, Any]:
         family, index, bit = address.rstrip("0123456789"), 0, None
     else:
         family, index, bit = parsed
-    return {
+    entry = {
         "addr": address,
         "family": family,
         "index": index,
@@ -154,6 +158,19 @@ def _new_entry(address: str) -> dict[str, Any]:
         "symbol": "",
         "short": "",
     }
+    if family == "R":
+        info = describe_register(address)
+        if info is not None:
+            entry["register"] = info
+            entry["zone_id"] = info["zone_id"]
+            entry["zone_name"] = info["zone_name"]
+            entry["owner"] = info["owner"]
+            entry["owner_label"] = info["owner_label"]
+            entry["plc_access"] = info["plc_access"]
+            entry["plc_access_label"] = info["plc_access_label"]
+            entry["bit_access"] = info["bit_access"]
+            entry["retain"] = info["retain"]
+    return entry
 
 
 def scan_document(document: LadDocument) -> dict[str, Any]:
@@ -175,19 +192,9 @@ def scan_document(document: LadDocument) -> dict[str, Any]:
                 str(item.get("value") or "").strip()
                 for item in (cell.get("operands") or [])
             ]
-            for position, operand in enumerate(operands):
-                parsed = parse_address(operand.replace("@", ""))
-                if parsed is None:
-                    continue
-                address = normalize_address(*parsed)
+
+            def touch(address: str, is_write: bool) -> None:
                 entry = entries.setdefault(address, _new_entry(address))
-                is_write = False
-                if mnemonic in COIL_MNEMONICS and position == 0:
-                    is_write = True
-                elif mnemonic in DATA_WRITE_MNEMONICS and position == len(operands) - 1:
-                    is_write = True
-                elif mnemonic in TIMER_MNEMONICS | COUNTER_MNEMONICS and position == 0:
-                    is_write = True
                 if is_write:
                     entry["writes"] += 1
                 else:
@@ -199,6 +206,35 @@ def scan_document(document: LadDocument) -> dict[str, Any]:
                     entry["networks"].append(network)
                 if mnemonic and mnemonic not in entry["mnemonics"]:
                     entry["mnemonics"].append(mnemonic)
+
+            axis_move = mnemonic.replace(" ", "") == "AXMOVE"
+            for position, operand in enumerate(operands):
+                operands_text = operand.upper()
+                if operands_text.startswith("R@R"):
+                    # R@R61 reads R61 first and then uses its value as the
+                    # target register; only the pointer register is knowable.
+                    operand_text = "R" + operand[3:]
+                else:
+                    operand_text = operand.replace("@", "")
+                parsed = parse_address(operand_text)
+                if parsed is None:
+                    continue
+                if axis_move and position == 1:
+                    # AX MOVE reads four consecutive registers starting at DATA.
+                    base = parsed[1]
+                    for offset in range(4):
+                        if base + offset <= FAMILY_LIMITS["R"]:
+                            touch(normalize_address("R", base + offset), False)
+                    continue
+                address = normalize_address(*parsed)
+                is_write = False
+                if mnemonic in COIL_MNEMONICS and position == 0:
+                    is_write = True
+                elif mnemonic in DATA_WRITE_MNEMONICS and position == len(operands) - 1:
+                    is_write = True
+                elif mnemonic in TIMER_MNEMONICS | COUNTER_MNEMONICS and position == 0:
+                    is_write = True
+                touch(address, is_write)
 
     for address, entry in entries.items():
         info = comments.get(address)
@@ -327,7 +363,33 @@ def resource_report(
     for address, entry in scan["entries"].items():
         readonly_hit = False
         if entry["writes"] > 0:
-            for zone in READ_ONLY_ZONES:
+            if entry["family"] == "R":
+                assessment = write_assessment(address)
+                if assessment["severity"] == "error":
+                    warnings.append(
+                        {
+                            "check": "read_only_write",
+                            "address": address,
+                            "detail": (
+                                f"{address} 被写 {entry['writes']} 次，但 "
+                                f"{assessment['detail']}"
+                            ),
+                        }
+                    )
+                    readonly_hit = True
+                elif assessment["severity"] == "warning":
+                    warnings.append(
+                        {
+                            "check": "register_zone_write",
+                            "address": address,
+                            "detail": (
+                                f"{address} 被写 {entry['writes']} 次；"
+                                f"{assessment['detail']}"
+                            ),
+                        }
+                    )
+                    readonly_hit = True
+            for zone in ([] if entry["family"] == "R" else READ_ONLY_ZONES):
                 if (
                     entry["family"] == zone["family"]
                     and zone["from"] <= entry["index"] <= zone["to"]
@@ -356,6 +418,32 @@ def resource_report(
     commented = sum(
         1 for entry in scan["entries"].values() if entry["comment"]
     )
+
+    register_zones: list[dict[str, Any]] = []
+    zone_rows: dict[str, dict[str, Any]] = {}
+    for entry in scan["entries"].values():
+        if entry["family"] != "R" or not entry.get("zone_id"):
+            continue
+        row = zone_rows.setdefault(
+            entry["zone_id"],
+            {
+                "zone_id": entry["zone_id"],
+                "zone_name": entry["zone_name"],
+                "owner": entry["owner"],
+                "owner_label": entry["owner_label"],
+                "plc_access": entry["plc_access"],
+                "plc_access_label": entry["plc_access_label"],
+                "addresses": 0,
+                "writes": 0,
+            },
+        )
+        row["addresses"] += 1
+        row["writes"] += int(entry["writes"])
+    register_zones = sorted(
+        zone_rows.values(),
+        key=lambda item: int(item["zone_id"].split("-")[0][1:]),
+    )
+
     return {
         "schema": RESOURCE_SCHEMA,
         "lad": {
@@ -369,11 +457,13 @@ def resource_report(
             "addresses_used": len(scan["entries"]),
             "commented": commented,
             "uncommented": len(scan["entries"]) - commented,
+            "register_zones": register_zones,
         },
         "families": families,
         "zones": {
             "read_only": list(READ_ONLY_ZONES),
             "notes": list(ZONE_NOTES),
+            "registers": register_zones,
         },
         "io_table": io_summary,
         "warnings": warnings,
@@ -388,11 +478,16 @@ def render_resources(result: dict[str, Any], *, format: str = "md") -> str:
 
 
 def render_resources_csv(result: dict[str, Any]) -> str:
-    lines = ["addr,family,symbol,purpose,reads,writes,programs,comment"]
+    lines = [
+        "addr,family,symbol,purpose,reads,writes,programs,comment,"
+        "zone,owner,plc_access,retain"
+    ]
     for family in FAMILY_ORDER:
         for entry in result["families"][family]["used"]:
             purpose = (entry.get("short") or "").replace(",", "，")
             comment = (entry.get("comment") or "").replace(",", "，").replace("\t", " ")
+            retain = entry.get("retain")
+            retain_text = "" if retain is None else ("true" if retain else "false")
             lines.append(
                 ",".join(
                     [
@@ -404,6 +499,10 @@ def render_resources_csv(result: dict[str, Any]) -> str:
                         str(entry["writes"]),
                         "/".join(entry["programs"]),
                         comment,
+                        entry.get("zone_id") or "",
+                        entry.get("owner") or "",
+                        entry.get("plc_access") or "",
+                        retain_text,
                     ]
                 )
             )
@@ -434,16 +533,28 @@ def render_resources_markdown(result: dict[str, Any]) -> str:
         lines.append(f"## {family}  ({block['count']} used, 0~{block['upper']})")
         if block["used"]:
             lines.append("")
-            lines.append("| addr | symbol | purpose | R/W | programs | comment |")
-            lines.append("|---|---|---|---|---|---|")
+            if family == "R":
+                lines.append("| addr | 分区 | symbol | purpose | R/W | programs | comment |")
+                lines.append("|---|---|---|---|---|---|---|")
+            else:
+                lines.append("| addr | symbol | purpose | R/W | programs | comment |")
+                lines.append("|---|---|---|---|---|---|")
             for entry in block["used"]:
                 access = f"{entry['reads']}/{entry['writes']}"
                 comment = (entry.get("comment") or "").replace("\t", " ").replace("|", "/")
-                lines.append(
-                    f"| `{entry['addr']}` | {entry.get('symbol') or ''} | "
-                    f"{entry.get('short') or ''} | {access} | "
-                    f"{'/'.join(entry['programs'])} | {comment[:60]} |"
-                )
+                if family == "R":
+                    lines.append(
+                        f"| `{entry['addr']}` | {entry.get('zone_id') or ''} | "
+                        f"{entry.get('symbol') or ''} | "
+                        f"{entry.get('short') or ''} | {access} | "
+                        f"{'/'.join(entry['programs'])} | {comment[:60]} |"
+                    )
+                else:
+                    lines.append(
+                        f"| `{entry['addr']}` | {entry.get('symbol') or ''} | "
+                        f"{entry.get('short') or ''} | {access} | "
+                        f"{'/'.join(entry['programs'])} | {comment[:60]} |"
+                    )
         free = block["free"]
         if free["ranges"]:
             text = ", ".join(
@@ -454,6 +565,20 @@ def render_resources_markdown(result: dict[str, Any]) -> str:
             lines.append(f"空闲候选：{text}")
             if free["truncated"]:
                 lines.append(f"（另有 {free['truncated']} 段未列出）")
+        lines.append("")
+
+    zone_rows = result["summary"].get("register_zones") or []
+    if zone_rows:
+        lines.append("## R 分区占用")
+        lines.append("")
+        lines.append("| 分区 | 名称 | 归属 | 阶梯权限 | 地址数 | 写次数 |")
+        lines.append("|---|---|---|---|---|---|")
+        for row in zone_rows:
+            lines.append(
+                f"| `{row['zone_id']}` | {row['zone_name']} | "
+                f"{row['owner_label']} | {row['plc_access_label']} | "
+                f"{row['addresses']} | {row['writes']} |"
+            )
         lines.append("")
 
     if empty_families:

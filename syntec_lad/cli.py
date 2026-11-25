@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .address_db import lookup_address
 from .compiler import compile_plan
 from .errors import LadError, LadValidationError, NativeValidationError
@@ -151,15 +152,31 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 
 def _cmd_lookup(args: argparse.Namespace) -> int:
     from .knowledge import search_knowledge
+    from .registers import (
+        describe_at_value,
+        describe_register,
+        render_at_value,
+        render_register_zone,
+    )
 
     hits = lookup_address(args.query, limit=args.limit)
+    query_upper = args.query.strip().upper()
+    is_indirect = query_upper.startswith("@R") or query_upper.startswith("R@R")
+    register = None if is_indirect else describe_register(args.query)
+    at_value = (
+        describe_at_value(args.query)
+        if is_indirect or args.query.strip().startswith("@")
+        else None
+    )
     knowledge = {"query": args.query, "hits": [], "hints": []}
-    if not hits and not args.addresses_only:
+    if not hits and register is None and at_value is None and not args.addresses_only:
         knowledge = search_knowledge(args.query, limit=args.limit)
     payload = {
         "query": args.query,
         "count": len(hits),
         "hits": hits,
+        "register": register,
+        "at_value": at_value,
         "knowledge": knowledge,
     }
     if args.json:
@@ -168,6 +185,19 @@ def _cmd_lookup(args: argparse.Namespace) -> int:
         for hit in hits:
             descriptions = " | ".join(hit["descriptions"])
             print(f"{hit['address']}  [{hit['type']}]  {descriptions}")
+        if register is not None:
+            print()
+            print(render_register_zone(register))
+        if at_value is not None:
+            print()
+            print(render_at_value(at_value))
+    elif register is not None or at_value is not None:
+        if register is not None:
+            print(render_register_zone(register))
+        if at_value is not None:
+            if register is not None:
+                print()
+            print(render_at_value(at_value))
     elif knowledge["hits"]:
         print(
             f"no address match for {args.query!r}; "
@@ -185,7 +215,7 @@ def _cmd_lookup(args: argparse.Namespace) -> int:
             "knowledge base; see references/panming/address-map.md for the full "
             "address model"
         )
-    return 0 if (hits or knowledge["hits"]) else 1
+    return 0 if (hits or register is not None or at_value is not None or knowledge["hits"]) else 1
 
 
 def _cmd_lint(args: argparse.Namespace) -> int:
@@ -677,7 +707,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="syntec-lad",
         description="Read, generate, patch, and validate Syntec MLCEdit .lad files.",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.3.7p")
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     lookup = sub.add_parser(

@@ -4,7 +4,10 @@
   "title": "Syntec LadEditor plan v1",
   "description": "A reviewed, deterministic description of main-program and subprogram ladder networks.",
   "type": "object",
-  "required": ["schema", "programs"],
+  "required": [
+    "schema",
+    "programs"
+  ],
   "additionalProperties": false,
   "properties": {
     "schema": {
@@ -12,10 +15,17 @@
     },
     "encoding": {
       "type": "string",
-      "enum": ["gb2312", "gb18030", "big5"]
+      "enum": [
+        "gb2312",
+        "gb18030",
+        "big5"
+      ]
     },
     "layout": {
-      "enum": ["auto", "expanded"],
+      "enum": [
+        "auto",
+        "expanded"
+      ],
       "default": "auto"
     },
     "variables": {
@@ -42,7 +52,9 @@
   "$defs": {
     "variable": {
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "additionalProperties": false,
       "properties": {
         "name": {
@@ -59,7 +71,10 @@
     },
     "resource": {
       "type": "object",
-      "required": ["addr", "source"],
+      "required": [
+        "addr",
+        "source"
+      ],
       "additionalProperties": false,
       "properties": {
         "addr": {
@@ -76,7 +91,11 @@
           "description": "What this point does and when it is driven"
         },
         "permission": {
-          "enum": ["read", "write", "readwrite"]
+          "enum": [
+            "read",
+            "write",
+            "readwrite"
+          ]
         },
         "retain": {
           "type": "boolean",
@@ -87,7 +106,12 @@
           "description": "Program or function that owns this address"
         },
         "source": {
-          "enum": ["io-table", "user", "scan", "suggested"],
+          "enum": [
+            "io-table",
+            "user",
+            "scan",
+            "suggested"
+          ],
           "description": "io-table=from the customer IO table, user=confirmed by the customer, scan=copied from resource-report, suggested=model guess (blocks build)"
         },
         "note": {
@@ -97,7 +121,10 @@
     },
     "program": {
       "type": "object",
-      "required": ["name", "networks"],
+      "required": [
+        "name",
+        "networks"
+      ],
       "additionalProperties": false,
       "properties": {
         "name": {
@@ -118,7 +145,9 @@
     },
     "network": {
       "type": "object",
-      "required": ["actions"],
+      "required": [
+        "actions"
+      ],
       "additionalProperties": false,
       "properties": {
         "comment": {
@@ -129,7 +158,10 @@
           "$ref": "#/$defs/condition"
         },
         "layout": {
-          "enum": ["auto", "expanded"],
+          "enum": [
+            "auto",
+            "expanded"
+          ],
           "default": "auto"
         },
         "actions": {
@@ -146,7 +178,9 @@
       "oneOf": [
         {
           "type": "object",
-          "required": ["contact"],
+          "required": [
+            "contact"
+          ],
           "additionalProperties": false,
           "properties": {
             "contact": {
@@ -154,22 +188,39 @@
               "pattern": "^([IOCSA][0-9]{3}|R[0-9]{4,5}\\.[0-9]{2}|TM[0-9]{3}|CT[0-9]{3})$"
             },
             "normally": {
-              "enum": ["open", "closed"]
+              "enum": [
+                "open",
+                "closed"
+              ]
             }
           }
         },
         {
           "type": "object",
-          "required": ["compare"],
+          "required": [
+            "compare"
+          ],
           "additionalProperties": false,
           "properties": {
             "compare": {
               "type": "object",
-              "required": ["relation", "value", "other"],
+              "required": [
+                "relation",
+                "value",
+                "other"
+              ],
               "additionalProperties": false,
               "properties": {
                 "relation": {
-                  "enum": [">", "<", "=", "gt", "lt", "eq", "=="]
+                  "enum": [
+                    ">",
+                    "<",
+                    "=",
+                    "gt",
+                    "lt",
+                    "eq",
+                    "=="
+                  ]
                 },
                 "value": {
                   "type": "string",
@@ -185,7 +236,9 @@
         },
         {
           "type": "object",
-          "required": ["all"],
+          "required": [
+            "all"
+          ],
           "additionalProperties": false,
           "properties": {
             "all": {
@@ -199,7 +252,9 @@
         },
         {
           "type": "object",
-          "required": ["any"],
+          "required": [
+            "any"
+          ],
           "additionalProperties": false,
           "properties": {
             "any": {
@@ -213,7 +268,9 @@
         },
         {
           "type": "object",
-          "required": ["always"],
+          "required": [
+            "always"
+          ],
           "additionalProperties": false,
           "properties": {
             "always": {
@@ -227,11 +284,21 @@
       "oneOf": [
         {
           "type": "object",
-          "required": ["op", "operand"],
+          "required": [
+            "op",
+            "operand"
+          ],
           "additionalProperties": false,
           "properties": {
             "op": {
-              "enum": ["OUT", "OUTI", "PLS", "PLF", "SET", "RST"]
+              "enum": [
+                "OUT",
+                "OUTI",
+                "PLS",
+                "PLF",
+                "SET",
+                "RST"
+              ]
             },
             "operand": {
               "type": "string",
@@ -241,7 +308,11 @@
         },
         {
           "type": "object",
-          "required": ["op", "timer", "preset"],
+          "required": [
+            "op",
+            "timer",
+            "preset"
+          ],
           "additionalProperties": false,
           "properties": {
             "op": {
@@ -252,7 +323,16 @@
               "pattern": "^TM[0-9]{3}$"
             },
             "unit": {
-              "enum": ["1ms", "10ms", "100ms", "1s", "0.001s", "0.01s", "0.1s", "1000ms"]
+              "enum": [
+                "1ms",
+                "10ms",
+                "100ms",
+                "1s",
+                "0.001s",
+                "0.01s",
+                "0.1s",
+                "1000ms"
+              ]
             },
             "preset": {
               "type": "string",
@@ -262,12 +342,21 @@
         },
         {
           "type": "object",
-          "required": ["op", "counter"],
+          "required": [
+            "op",
+            "counter"
+          ],
           "description": "CNTRESET accepts no preset or only #0. Other counter actions require a preset.",
           "additionalProperties": false,
           "properties": {
             "op": {
-              "enum": ["CNTUP", "CNTDOWN", "CNTRESET", "CNTRINGUP", "CNTRINGDOWN"]
+              "enum": [
+                "CNTUP",
+                "CNTDOWN",
+                "CNTRESET",
+                "CNTRINGUP",
+                "CNTRINGDOWN"
+              ]
             },
             "counter": {
               "type": "string",
@@ -281,11 +370,24 @@
         },
         {
           "type": "object",
-          "required": ["op", "src", "dst"],
+          "required": [
+            "op",
+            "src",
+            "dst"
+          ],
           "additionalProperties": false,
           "properties": {
             "op": {
-              "enum": ["MOV", "ADD", "SUB", "MUL", "DIV", "AND", "OR", "XOR"]
+              "enum": [
+                "MOV",
+                "ADD",
+                "SUB",
+                "MUL",
+                "DIV",
+                "AND",
+                "OR",
+                "XOR"
+              ]
             },
             "src": {
               "type": "string",
@@ -299,12 +401,19 @@
         },
         {
           "type": "object",
-          "required": ["op", "target"],
+          "required": [
+            "op",
+            "target"
+          ],
           "description": "JMP and JSR targets must name a declared 1-6 character alphanumeric subprogram. MAIN and undeclared local labels are rejected. MSG accepts a 1-6 byte ASCII message identifier.",
           "additionalProperties": false,
           "properties": {
             "op": {
-              "enum": ["JMP", "JSR", "MSG"]
+              "enum": [
+                "JMP",
+                "JSR",
+                "MSG"
+              ]
             },
             "target": {
               "type": "string",

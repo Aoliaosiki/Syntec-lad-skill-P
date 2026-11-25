@@ -110,14 +110,16 @@ def _decode_operand(
     elif operand_type == 2:
         value = f"CT{raw_i16:03d}"
     elif operand_type == 3:
-        prefix = "@" if _indirect(cell, address) else ""
-        value = f"{prefix}R{raw_u16:04d}"
+        if _indirect(cell, address):
+            value = f"R@R{raw_u16:04d}"
+        else:
+            value = f"R{raw_u16:04d}"
     elif operand_type == 4:
         value = f"#{raw_i16:05d}"
     elif operand_type == 5:
         value = _decode_text(cell[address:address + 6], encoding)
     elif operand_type == 6:
-        value = str(raw_i16)
+        value = f"AX{raw_u16}"
     else:
         value = f"OP?{raw_u16:04X}"
     return {
@@ -170,6 +172,16 @@ def decode_cell(
                 second = _decode_operand(cell, 4, meta.op2_type, encoding)
                 if second is not None:
                     operands.append(second)
+            # AX STOP's interface only defines AXID.  MLCEdit still renders
+            # and persists a second operand, but the native converter reads
+            # only the axis; annotate it instead of pretending it is a stop
+            # condition.
+            if raw_opcode == 0xBB and len(operands) > 1:
+                operands[1]["ignored"] = True
+                operands[1]["semantic_note"] = (
+                    "AX STOP only uses AXID; the second operand is shown and "
+                    "saved by MLCEdit but ignored at execution"
+                )
 
     values = [str(item.get("value", "")) for item in operands]
     result = {

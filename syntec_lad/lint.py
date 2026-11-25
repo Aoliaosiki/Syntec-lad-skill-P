@@ -39,6 +39,9 @@ ACTION_MNEMONICS = COIL_MNEMONICS | {
     "JMP",
     "JSR",
     "MSG",
+    "AX MOVE",
+    "AX RUN",
+    "AX STOP",
 }
 FLOW_ACTION_MNEMONICS = {"JMP", "JSR", "MSG"}
 
@@ -103,6 +106,28 @@ def lint_document(
             mnemonic = cell["mnemonic"]
             operands = cell.get("operands") or []
             if not operands:
+                continue
+            if mnemonic == "AX STOP":
+                if len(operands) > 1:
+                    second = operands[1]
+                    try:
+                        raw_second = int(second.get("raw_i16") or 0)
+                    except (TypeError, ValueError):
+                        raw_second = 0
+                    if raw_second != 0:
+                        issues.append(
+                            _issue(
+                                "axis_stop_extra_operand",
+                                "warning",
+                                f"AX STOP 只使用轴号 {operands[0].get('value')}；"
+                                f"第二操作数 {second.get('value')} 在 LadEditor 中"
+                                "显示并保存，但执行时被忽略",
+                                network=candidate["id"],
+                                program=candidate.get("program"),
+                                record=candidate["record_start"],
+                                extra={"column": cell["column"]},
+                            )
+                        )
                 continue
             target = str(operands[0].get("value") or "").strip()
             parsed = _parse(target)
