@@ -15,7 +15,6 @@
 - 常用回路：`panming/patterns.md`
 - 润滑/液压/排屑/刀库/M 码：`panming/function-library.md`
 - M 码握手与等待型时序：`mcode-patterns.md`
-- 换刀状态机、单步、急停收尾、第三软限位：`tool-change-plc.md`
 - 现场约定和注释：`panming/project-conventions.md`
 - 短地址与 SDK 规范地址：`address-notation.md`
 

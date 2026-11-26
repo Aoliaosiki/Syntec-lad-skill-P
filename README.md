@@ -12,8 +12,7 @@
 - 调用原厂 32 位 `LadDLL.dll` 做原生语法校验。
 - 内置新代 PLC 工程知识库：8 类元件、C/S/R 地址表、R 分区与权限/保持/
   位存取、`@` 公用变量到 R 的分段映射与 `R@R` 间接寻址、602 条地址索引、12 个工艺模式，
-  以及润滑/液压/排屑/刀库写法库、`S29/R1/C38` 标准 M 码握手和 PLC 换刀
-  状态机/单步/急停收尾/第三软限位评审。
+  以及润滑/液压/排屑/刀库写法库、`S29/R1/C38` 标准 M 码握手。
 
 > **本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2 的优化版。**
 > 当前版本：`0.3.9p`（正式版），仓库：
@@ -23,6 +22,7 @@
 ## 目录
 
 - [0.3.9p 重点](#039p-重点)
+- [0.3.8p 重点](#038p-重点)
 - [0.3.7p 重点](#037p-重点)
 - [0.3.6p 重点](#036p-重点)
 - [功能总览](#功能总览)
@@ -43,6 +43,43 @@
 - [版本与授权](#版本与授权)
 
 ## 0.3.9p 重点
+
+### M 码：S29 读入、R1 取号、C38 放行
+
+M 码不是只写一条 `CMPE #50 R1 -> OUT A150`。标准链路是：
+
+- `S029` 为 ON 时才解码 M 码，M 号从 `R1` 读取；
+- 每个 M 码一个独立请求位，不要把所有 M 码塞进一个大 rung；
+- `C038` 是 M/S/T 完成信号，**常态 ON**；
+- 等待型 M 码（M03/M04/M05/M19/M50/M51 等）执行期间必须把 `C38` 拉低，
+  实际完成条件满足后再恢复 ON；
+- 非等待型 M 码（M07/M08/M09 等）不处理 `C38`，但仍要有急停、复位和互锁；
+- 只要该 M 码在加工档的任何位置需要等待 G 码完成，解码条件就要串
+  `S030`（分布结束）；M05/M19 是最常见的例子，不能因单独执行时没有 G 码
+  就省略。
+- 官方 MSD 最小模型是 `A50` 就绪 / `A51` 执行 / `A70` 非等待直通。
+  现场骨架可能是 `A050/A051/A070` 或别的组合；原机已经验证的 `C38`
+  支路要逐字节保留，新 M/T 码只改动作和完成条件。某案例出现的
+  `A050/A051/A052/A101/A188` 不是所有新代 PLC 的通用模板。
+
+`plan-lint` 会对等待型 M 码没有任何 `C38` 写入的计划报
+`mcode_wait_without_c38`，对比较 `R1` 但同网络没有 `S029` 的计划报
+`mcode_decode_without_s029`。完整时序、`C38` 布尔式、真实样本和检查表见
+`references/mcode-patterns.md`。
+
+### 子程序命名：短标题、长批注
+
+新增 `references/subprogram-naming.md`。`LAB` 名只表达功能和侧别，程序树
+第一行是 2~8 字短标题（如 `【刀库】-刀盘转位`），详细职责、调用条件、
+互锁和参数放到后续批注行。`plan-lint` 新增
+`program_name_invalid`（error）、`program_title_missing`、
+`program_title_too_long`、`program_title_numbered`、
+`program_title_sentence`、`program_title_without_category`，避免把整句
+职责写进程序树。
+
+
+
+## 0.3.8p 重点
 
 ### R 分区：先判断数据性质，再选区
 
@@ -70,58 +107,11 @@ python $LadCli lookup @108001
 `r_conditional_zone`，以及整字写 `Rn` 又登记 `Rn.yy` 时的
 `register_bitwise_overwrite`。完整决策表见 `references/register-map.md`。
 
-### M 码：S29 读入、R1 取号、C38 放行
-
-M 码不是只写一条 `CMPE #50 R1 -> OUT A150`。标准链路是：
-
-- `S029` 为 ON 时才解码 M 码，M 号从 `R1` 读取；
-- 每个 M 码一个独立请求位，不要把所有 M 码塞进一个大 rung；
-- `C038` 是 M/S/T 完成信号，**常态 ON**；
-- 等待型 M 码（M03/M04/M05/M19/M50/M51 等）执行期间必须把 `C38` 拉低，
-  实际完成条件满足后再恢复 ON；
-- 非等待型 M 码（M07/M08/M09 等）不处理 `C38`，但仍要有急停、复位和互锁；
-- 只要该 M 码在加工档的任何位置需要等待 G 码完成，解码条件就要串
-  `S030`（分布结束）；M05/M19 是最常见的例子，不能因单独执行时没有 G 码
-  就省略。
-- 官方 MSD 最小模型是 `A50` 就绪 / `A51` 执行 / `A70` 非等待直通。
-  现场骨架可能是 `A050/A051/A070` 或别的组合；原机已经验证的 `C38`
-  支路要逐字节保留，新 M/T 码只改动作和完成条件。某案例出现的
-  `A050/A051/A052/A101/A188` 不是所有新代 PLC 的通用模板。
-
-`plan-lint` 会对等待型 M 码没有任何 `C38` 写入的计划报
-`mcode_wait_without_c38`，对比较 `R1` 但同网络没有 `S029` 的计划报
-`mcode_decode_without_s029`。完整时序、`C38` 布尔式、真实样本和检查表见
-`references/mcode-patterns.md`。
-
-### PLC 换刀：状态机比模板重要
-
-新增 `references/tool-change-plc.md`，把换刀改造按“官方规则 / 官方示例 /
-现场骨架 / 单机结构”分级。重点检查：
-
-- 模式位只做起动前条件，不串进每一步推进；暂停信号不是步骤许可；
-- 单步每个机械动作独立步号，一次按键只放行一段；
-- `TIM` 显式写单位，到位后复归，单步等人时不计时；
-- 点位从 HMI/参数读，不写死常数；换机必须重算单位与范围；
-- 急停要停轴、清状态、恢复被流程关闭的输出/第三软限位，不得自动续走；
-- 官方第三软限位是 `C83/R638`，第一软限位 `Pr2401~Pr2440` 没有 C bit；
-- 某案例的 `R58.0` 关软限位只是单机映射，不能当通用地址。
-
-### 子程序命名：短标题、长批注
-
-新增 `references/subprogram-naming.md`。`LAB` 名只表达功能和侧别，程序树
-第一行是 2~8 字短标题（如 `【刀库】-刀盘转位`），详细职责、调用条件、
-互锁和参数放到后续批注行。`plan-lint` 新增
-`program_name_invalid`（error）、`program_title_missing`、
-`program_title_too_long`、`program_title_numbered`、
-`program_title_sentence`、`program_title_without_category`，避免把整句
-职责写进程序树。
-
 ### 八类元件 smoke 验证
 
 新增 `tests/test_elements.py`：同一份计划生成 `I/O/A/C/S/R/TM/CT` 八类元件。
 Python 回读 0 issue，原厂 `LadDLL.SyntaxCheck` 通过。该测试只证明格式/编辑器
 兼容，不代表真机动作安全。
-
 
 ### 0.3.8p 修复汇总
 
@@ -1151,7 +1141,6 @@ python .\scripts\run_syntec_lad.py inspect .\source.lad
 | 12 个常用回路 | `references/panming/patterns.md` |
 | 润滑/液压/排屑/刀库/M 码 | `references/panming/function-library.md` |
 | M 码 `S29/R1/C38`、等待型握手与超时 | `references/mcode-patterns.md` |
-| PLC 换刀状态机、单步、急停收尾、第三软限位 | `references/tool-change-plc.md` |
 | 现场约定和程序骨架 | `references/panming/project-conventions.md` |
 | 注释编码 | `references/panming/comment-encoding.md` |
 | 子程序命名、树标题与批注分层 | `references/subprogram-naming.md` |

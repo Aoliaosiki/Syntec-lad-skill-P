@@ -21,7 +21,6 @@ entire knowledge base for a simple record inspection.
 | Design a common circuit | `panming/patterns.md` |
 | Implement lubrication, hydraulic, chip conveyor, coolant, tool magazine, or M code | `panming/function-library.md` |
 | Write an M-code decode, wait/non-wait output, or `C38` handshake | `mcode-patterns.md` |
-| Review a PLC tool-change state machine, single-step, emergency-stop cleanup, or third soft limit | `tool-change-plc.md` |
 | Follow real-machine layout and naming conventions | `panming/project-conventions.md` |
 | Encode or check Chinese comments | `panming/comment-encoding.md` |
 | Inspect raw record layout | `panming/lad-format.md` |

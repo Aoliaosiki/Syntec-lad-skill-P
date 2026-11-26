@@ -1,6 +1,6 @@
 ---
 name: syntec-lad
-description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, R register zones with owner/permission/retain/bit-access/Pr conditions, piecewise @ global-variable to R mapping (@1~@400 is not R1~R400) and R@R indirect-addressing rules, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, PLC tool-change state-machine and third-soft-limit review, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; also covers I/O/register resource planning with human-confirmed plan.resources, graded comment coverage, and optional Confluence cross-verification with explicit offline degradation; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
+description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, R register zones with owner/permission/retain/bit-access/Pr conditions, piecewise @ global-variable to R mapping (@1~@400 is not R1~R400) and R@R indirect-addressing rules, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; also covers I/O/register resource planning with human-confirmed plan.resources, graded comment coverage, and optional Confluence cross-verification with explicit offline degradation; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
 metadata:
   short-description: Edit, validate, and design Syntec .lad ladder logic safely
 ---
@@ -134,8 +134,6 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    - R512~R1023 permissions: `references/panming/R512-R1023-权限表.md`
    - M-code `S29/R1/C38` handshake and wait/non-wait patterns:
      `references/mcode-patterns.md`
-   - PLC tool change, single-step, emergency-stop cleanup, and third soft
-     limit: `references/tool-change-plc.md`
 
    Use `references/knowledge-map.md` to choose the smallest relevant file.
 
@@ -482,7 +480,6 @@ question marks under cp950.
 | Contact/coil/timer/counter/compare/flow grammar | `references/panming/element-grammar.md` |
 | 12 reusable circuits | `references/panming/patterns.md` |
 | Lubrication/hydraulic/chip/coolant/tool magazine/M code | `references/panming/function-library.md` |
-| PLC tool change, single-step, emergency-stop cleanup, third soft limit | `references/tool-change-plc.md` |
 | Field conventions and program skeleton | `references/panming/project-conventions.md` |
 | Comment encoding | `references/panming/comment-encoding.md` |
 | Compact binary layout | `references/panming/lad-format.md` |
@@ -526,9 +523,6 @@ Syntec manual.
   remapping, and delivery checks.
 - `references/knowledge-map.md` for routing and source hierarchy.
 - `references/address-notation.md` for short/canonical address conversion.
-- `references/tool-change-plc.md` for case-based tool-change review: C38
-  preservation, state-machine rules, single-step, timers, emergency-stop
-  cleanup, and third soft limit.
 - `syntec_lad/schema/lad-plan.schema.json` and
   `syntec_lad/schema/lad-change.schema.json` for exact JSON fields.
 - `examples/demo.plan.json` and `examples/mvp.plan.json` as format fixtures,

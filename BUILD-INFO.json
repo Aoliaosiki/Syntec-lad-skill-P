@@ -1,10 +1,10 @@
 {
-    "builtAt":  "2026-11-26T17:49:29.1616679+08:00",
+    "builtAt":  "2026-11-26T17:57:04.4794334+08:00",
     "package":  "syntec-lad",
     "edition":  "public",
     "version":  "0.3.9p",
     "axisGeneration":  false,
-    "fileCount":  161,
+    "fileCount":  160,
     "denylist":  "pass",
     "pageIdScan":  "pass",
     "absolutePathScan":  "pass",
