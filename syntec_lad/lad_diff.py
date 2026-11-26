@@ -306,7 +306,8 @@ def diff_documents(
 
     # Keep only meaningful entries in the payload; unchanged runs are summarized.
     shown = [entry for entry in entries if entry["status"] != "unchanged"]
-    truncated = len(shown) > max(context, 0)
+    limit = max(context, 0)
+    truncated = bool(limit) and len(shown) > limit
     result: dict[str, Any] = {
         "schema": DIFF_SCHEMA,
         "left": str(left.source_path) if left.source_path else None,
@@ -319,7 +320,7 @@ def diff_documents(
         "left_segments": len(left_segments),
         "right_segments": len(right_segments),
         "summary": counts,
-        "entries": shown[: max(context, 0)] if context else shown,
+        "entries": shown[:limit] if limit else shown,
         "entries_total": len(shown),
         "truncated": truncated,
     }
@@ -351,7 +352,7 @@ def render_diff(result: dict[str, Any], *, context: int = 8) -> str:
         "removed": "Removed",
         "moved": "Moved",
     }
-    shown = result["entries"][: max(context, 0)]
+    shown = result["entries"][: max(context, 0)] if context else result["entries"]
     current_status = None
     for entry in shown:
         if entry["status"] != current_status:

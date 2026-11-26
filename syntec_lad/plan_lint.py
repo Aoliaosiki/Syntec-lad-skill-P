@@ -35,10 +35,19 @@ DATA_ACTIONS = {"MOV", "ADD", "SUB", "MUL", "DIV", "AND", "OR", "XOR"}
 TIMER_ACTIONS = {"TIM"}
 COUNTER_ACTIONS = {"CNTUP", "CNTDOWN", "CNTRESET", "CNTRINGUP", "CNTRINGDOWN"}
 AXIS_ACTIONS = {"AXMOVE", "AXRUN", "AXSTOP"}
+WAIT_M_CODES = {3, 4, 5, 6, 19, 50, 51, 52, 53}
 ADDR_TOKEN_RE = re.compile(r"@?\b(I|O|A|C|S|TM|CT)(\d{1,4})(?:\.(\d{1,2}))?\b")
 REG_TOKEN_RE = re.compile(r"@?\bR(\d{1,5})(?:\.(\d{1,2}))?\b")
 AXIS_TOKEN_RE = re.compile(r"^AX(\d{1,5})$")
 AXIS_MOVE_DATA_RE = re.compile(r"^R(\d{1,5})$")
+CONST_INT_RE = re.compile(r"^#([+-]?\d{1,6})$")
+PROGRAM_NAME_RE = re.compile(r"^[A-Za-z0-9]{1,6}$")
+PROGRAM_TITLE_CATEGORY_RE = re.compile(r"^【[^】\r\n]{1,10}】\s*[-－–—─]\s*\S")
+PROGRAM_TITLE_NUMBER_RE = re.compile(r"^\s*(?:[（(]\s*\d+\s*[)）]|\d+\s*[.、:：])")
+PROGRAM_TITLE_TRAILING_NUMBER_RE = re.compile(r"[（(]\s*\d+\s*[)）]\s*$")
+PROGRAM_TITLE_SENTENCE_RE = re.compile(r"[，,。；;！!？?、]")
+
+PROGRAM_TITLE_MAX_CHARS = 20
 
 
 def _operand_key(operand: Any) -> tuple[Any, ...] | None:
@@ -261,6 +270,101 @@ def _collect_networks(
                 )
 
 
+def _program_title_issues(programs: list[Any]) -> list[dict[str, Any]]:
+    """Check subprogram labels and the first line of their program comment.
+
+    MLCEdit shows the LAB name in parentheses and the leading ct=3 comment as
+    the tree title.  A title like ``【刀库】-伺服刀库`` stays readable; a full
+    sentence pushes every sibling out of view and belongs in the note lines.
+    """
+
+    issues: list[dict[str, Any]] = []
+    for index, program in enumerate(programs):
+        if index == 0 or not isinstance(program, dict):
+            continue
+        name = str(program.get("name") or "").strip()
+        if not PROGRAM_NAME_RE.fullmatch(name):
+            issues.append(
+                _issue(
+                    "program_name_invalid",
+                    "error",
+                    f"子程序名 {name or '<空>'} 非法；LAB 名只能是 1~6 位 "
+                    "ASCII 字母/数字（如 1、MAG1）。中文和短标题写到 "
+                    "comment 第一行，不要塞进 LAB 名",
+                    program=name or None,
+                    networks=[],
+                )
+            )
+
+        raw = program.get("comment")
+        text = str(raw).strip() if raw is not None else ""
+        title = text.splitlines()[0].strip() if text else ""
+        if not title:
+            issues.append(
+                _issue(
+                    "program_title_missing",
+                    "warning",
+                    "子程序没有 comment 标题；MLCEdit 程序树会只显示 LAB 名。"
+                    "第一行写【分类】-短主题，例如【刀库】-伺服刀库",
+                    program=name or None,
+                    networks=[],
+                )
+            )
+            continue
+        if len(title) > PROGRAM_TITLE_MAX_CHARS:
+            issues.append(
+                _issue(
+                    "program_title_too_long",
+                    "warning",
+                    f"子程序标题 {title!r} 有 {len(title)} 个字，超过 "
+                    f"{PROGRAM_TITLE_MAX_CHARS} 字；程序树只显示第一行。"
+                    "把职责、触发条件、互锁和参数清单移到批注后续行或"
+                    "程序体头部",
+                    program=name or None,
+                    networks=[],
+                )
+            )
+        numbered = bool(PROGRAM_TITLE_NUMBER_RE.match(title)) or bool(
+            PROGRAM_TITLE_TRAILING_NUMBER_RE.search(title)
+        )
+        if numbered:
+            issues.append(
+                _issue(
+                    "program_title_numbered",
+                    "warning",
+                    f"子程序标题 {title!r} 开头或结尾自带编号；LadEditor 已在"
+                    "标题后显示 (LAB 名)，编号会重复。删除 (1)、(9) 之类的序号",
+                    program=name or None,
+                    networks=[],
+                )
+            )
+        if PROGRAM_TITLE_SENTENCE_RE.search(title):
+            issues.append(
+                _issue(
+                    "program_title_sentence",
+                    "warning",
+                    f"子程序标题 {title!r} 含逗号、句号、分号、问号或顿号，"
+                    "像一句说明而不是树上的短标签；改成名词短语，把整句"
+                    "移到批注",
+                    program=name or None,
+                    networks=[],
+                )
+            )
+        if not PROGRAM_TITLE_CATEGORY_RE.match(title):
+            issues.append(
+                _issue(
+                    "program_title_without_category",
+                    "warning",
+                    f"子程序标题 {title!r} 没有【分类】-前缀；建议用"
+                    "【外部端子】【面板功能】【系统功能】【刀库】【报警】"
+                    "【M码】等分类，方便在程序树里成组查找",
+                    program=name or None,
+                    networks=[],
+                )
+            )
+    return issues
+
+
 def plan_usage(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Collect every address a plan touches, with its read/write role."""
 
@@ -335,8 +439,10 @@ def _axis_issues(container: dict[str, Any]) -> list[dict[str, Any]]:
                         _issue(
                             "axis_not_supported",
                             "error",
-                            f"{op} 是 Alpha 版专属动作；当前正式版不生成 PLC 轴，"
-                            "请改用 Alpha 版。",
+                            f"{op} 在正式版被硬性禁止：正式版不生成、也不校验 "
+                            "PLC 轴动作。轴运动可能导致撞机、设备损坏或人身伤害；"
+                            "严禁绕过门禁、手改 .lad 或手工拼装轴记录。请停止写入，"
+                            "改用 Alpha 版并先完成专项安全评审。",
                             program=program,
                             networks=[network_id],
                         )
@@ -427,6 +533,408 @@ def _axis_issues(container: dict[str, Any]) -> list[dict[str, Any]]:
                                 networks=[network_id],
                             )
                         )
+    return issues
+
+
+def _network_groups(
+    container: dict[str, Any],
+) -> list[tuple[str, list[Any]]]:
+    groups: list[tuple[str, list[Any]]] = []
+    programs = container.get("programs")
+    if isinstance(programs, list):
+        for program in programs:
+            if isinstance(program, dict):
+                groups.append(
+                    (str(program.get("name") or "?"), program.get("networks"))
+                )
+    operations = container.get("operations")
+    if isinstance(operations, list):
+        for index, operation in enumerate(operations, start=1):
+            if isinstance(operation, dict):
+                groups.append(
+                    (f"OP{index}", operation.get("networks"))
+                )
+    return groups
+
+
+def _axis_actions(
+    container: dict[str, Any],
+) -> list[tuple[str, str, dict[str, Any], int, Any]]:
+    actions: list[tuple[str, str, dict[str, Any], int, Any]] = []
+    for program, networks in _network_groups(container):
+        if not isinstance(networks, list):
+            continue
+        for index, network in enumerate(networks, start=1):
+            if not isinstance(network, dict):
+                continue
+            raw_actions = network.get("actions")
+            if not isinstance(raw_actions, list):
+                continue
+            for action in raw_actions:
+                if not isinstance(action, dict):
+                    continue
+                op = str(action.get("op") or "").upper()
+                if op not in AXIS_ACTIONS:
+                    continue
+                match = AXIS_TOKEN_RE.fullmatch(
+                    str(action.get("axis") or "").strip().upper()
+                )
+                axis_number = int(match.group(1)) if match else 0
+                actions.append(
+                    (
+                        program,
+                        f"N{index:04d}",
+                        action,
+                        axis_number,
+                        network.get("condition"),
+                    )
+                )
+    return actions
+
+
+def _axis_usage_issues(container: dict[str, Any]) -> list[dict[str, Any]]:
+    """Catch axis plans that omit the scan-level and safety scaffolding."""
+
+    if not AXIS_GENERATION:
+        return []
+
+    issues: list[dict[str, Any]] = []
+    actions = _axis_actions(container)
+    move_actions = [
+        item for item in actions if item[2].get("op", "").upper() in {"AXMOVE", "AXRUN"}
+    ]
+    has_stop = any(item[2].get("op", "").upper() == "AXSTOP" for item in actions)
+
+    resources = container.get("resources")
+    declared = {
+        _normalize(item.get("addr"))
+        for item in resources
+        if isinstance(item, dict)
+    } if isinstance(resources, list) else None
+
+    for program, network_id, action, _axis_number, condition in actions:
+        op = str(action.get("op") or "").upper()
+        if condition is None or (
+            isinstance(condition, dict) and condition.get("always") is True
+        ):
+            issues.append(
+                _issue(
+                    "axis_trigger_unconditional",
+                    "warning",
+                    f"{op} 没有明确触发条件；AX 元件的 EN 是电平，每个扫描周期"
+                    "都会重新发一次命令。用单扫描脉冲或状态机的准备步触发，"
+                    "不要无条件常通",
+                    program=program,
+                    networks=[network_id],
+                )
+            )
+
+        if op == "AXMOVE":
+            data_text = str(action.get("data") or "").strip().upper()
+            match = re.fullmatch(r"R(\d{1,5})", data_text)
+            if declared is not None and match:
+                base = int(match.group(1))
+                missing = [
+                    f"R{base + offset}"
+                    for offset in range(4)
+                    if f"R{base + offset}" not in declared
+                ]
+                if missing:
+                    issues.append(
+                        _issue(
+                            "axis_move_data_unregistered",
+                            "warning",
+                            f"AXMOVE 的 DATA={data_text} 需要连续 4 个寄存器 "
+                            f"{data_text}~R{base + 3}，但 resources 没有登记 "
+                            f"{', '.join(missing)}；目标/速度/模式/保留必须"
+                            "逐个说明来源",
+                            program=program,
+                            networks=[network_id],
+                        )
+                    )
+
+    if move_actions and not has_stop:
+        programs = sorted({item[0] for item in move_actions})
+        issues.append(
+            _issue(
+                "axis_stop_missing",
+                "warning",
+                "plan 里有 AXMOVE/AXRUN，但没有 AXSTOP。PLC 轴移动必须能在"
+                "故障、急停和复位时停轴，并清除状态机；不能只靠断 EN",
+                program=",".join(programs),
+                networks=sorted({item[1] for item in move_actions}),
+            )
+        )
+
+    issues.extend(_axis_unit_issues(container))
+    issues.extend(_axis_stop_reset_issues(container))
+    issues.extend(_axis_move_data_order_issues(container))
+    return issues
+
+
+def _register_index(value: Any) -> int | None:
+    match = re.fullmatch(r"R(\d{1,5})", _normalize(value))
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _const_int(value: Any) -> int | None:
+    match = CONST_INT_RE.fullmatch(str(value or "").strip())
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _axis_unit_issues(container: dict[str, Any]) -> list[dict[str, Any]]:
+    """Require a reviewed Pr17/BLU declaration for every AX MOVE plan."""
+
+    if not AXIS_GENERATION:
+        return []
+    if not any(
+        str(action.get("op") or "").upper() == "AXMOVE"
+        for _program, _network, action, _axis, _condition in _axis_actions(container)
+    ):
+        return []
+
+    machine = container.get("machine")
+    pr17 = machine.get("pr17") if isinstance(machine, dict) else None
+    if pr17 in {1, 2, 3}:
+        return []
+
+    return [
+        _issue(
+            "axis_unit_undeclared",
+            "warning",
+            "plan 含 AXMOVE，但没有在顶层 machine.pr17 声明控制精度。"
+            "DATA+0 的单位是 BLU，不是 mm；Pr17=1/2/3 时 1 BLU 分别是 "
+            "0.01/0.001/0.0001 mm。生成前必须确认 Pr17、画面点位寄存器的"
+            "实际单位（mm 或 BLU）和换算链，不能填默认值",
+            program=None,
+            networks=[],
+        )
+    ]
+
+
+def _axis_stop_reset_issues(container: dict[str, Any]) -> list[dict[str, Any]]:
+    """Reset may interrupt PLC-axis motion, so a reset stop must be explicit."""
+
+    if not AXIS_GENERATION:
+        return []
+
+    issues: list[dict[str, Any]] = []
+    for program, network_id, action, _axis_number, condition in _axis_actions(container):
+        if str(action.get("op") or "").upper() != "AXSTOP":
+            continue
+        found: set[str] = set()
+        _walk_condition(condition, found)
+        if "C37" not in found:
+            continue
+        issues.append(
+            _issue(
+                "axis_stop_reset",
+                "warning",
+                "AXSTOP 的触发条件包含 C037（复位）。官方说明复位会中断"
+                "执行中的 PLC 轴动作；如果流程规定换刀/上下料中复位无效，"
+                "应把复位从停轴条件移除，并在流程中挡住复位。若复位确实"
+                "需要停轴，必须同时定义停稳后的恢复路径",
+                program=program,
+                networks=[network_id],
+            )
+        )
+    return issues
+
+
+def _axis_move_data_order_issues(container: dict[str, Any]) -> list[dict[str, Any]]:
+    """MoveAx must sit after the rungs that write its DATA block."""
+
+    if not AXIS_GENERATION:
+        return []
+
+    issues: list[dict[str, Any]] = []
+    programs = container.get("programs")
+    if not isinstance(programs, list):
+        return issues
+
+    for program in programs:
+        if not isinstance(program, dict):
+            continue
+        name = str(program.get("name") or "MAIN")
+        networks = program.get("networks")
+        if not isinstance(networks, list):
+            continue
+
+        written: dict[int, str | None] = {}
+        for index, network in enumerate(networks, start=1):
+            if not isinstance(network, dict):
+                continue
+            network_id = f"N{index:04d}"
+            actions = network.get("actions")
+            if not isinstance(actions, list):
+                continue
+
+            for action in actions:
+                if not isinstance(action, dict):
+                    continue
+                op = str(action.get("op") or "").upper()
+                if op in DATA_ACTIONS:
+                    dst = _register_index(action.get("dst"))
+                    if dst is not None:
+                        written[dst] = (
+                            str(action.get("src") or "").strip()
+                            if op == "MOV"
+                            else None
+                        )
+                    continue
+                if op != "AXMOVE":
+                    continue
+
+                base = _register_index(action.get("data"))
+                if base is None:
+                    continue
+                missing = [
+                    f"R{base + offset}"
+                    for offset in range(4)
+                    if base + offset not in written
+                ]
+                if not missing:
+                    mode = _const_int(written.get(base + 2))
+                    if mode is not None and mode not in {0, 1}:
+                        issues.append(
+                            _issue(
+                                "axis_move_mode_invalid",
+                                "warning",
+                                f"AXMOVE DATA={action.get('data')} 的 "
+                                f"R{base + 2}（模式）由 MOV 写成 #{mode}；"
+                                "官方定义为 0=增量、1=绝对。确认是写错还是"
+                                "由寄存器运行时赋值",
+                                program=name,
+                                networks=[network_id],
+                            )
+                        )
+                    reserved = _const_int(written.get(base + 3))
+                    if reserved is not None and reserved != 0:
+                        issues.append(
+                            _issue(
+                                "axis_move_reserved_nonzero",
+                                "warning",
+                                f"AXMOVE DATA={action.get('data')} 的 "
+                                f"R{base + 3} 是保留寄存器，但 MOV 写成 "
+                                f"#{reserved}；官方要求保留、目前无功能，"
+                                "不要复用它表达模式或标志",
+                                program=name,
+                                networks=[network_id],
+                            )
+                        )
+                    continue
+                issues.append(
+                    _issue(
+                        "axis_move_data_order",
+                        "warning",
+                        f"AXMOVE 的 DATA={action.get('data')}：在本 program 的 "
+                        f"MoveAx 之前没有找到写 {', '.join(missing)} 的支路。"
+                        "官方要求 MoveAx 必须排在设定内容之后，否则会用到旧值；"
+                        "若 DATA 由子程序、宏或上位机写入，请人工确认扫描顺序",
+                        program=name,
+                        networks=[network_id],
+                    )
+                )
+    return issues
+
+
+def _walk_m_compare(condition: Any, found: set[int]) -> None:
+    if not isinstance(condition, dict):
+        return
+    compare = condition.get("compare")
+    if isinstance(compare, dict):
+        relation = str(compare.get("relation") or "=").strip()
+        if relation in {"=", "==", "EQ"}:
+            left = _normalize(compare.get("value"))
+            right = str(compare.get("other") or "").strip()
+            if left == "R1" and right.startswith("#"):
+                try:
+                    found.add(int(right[1:]))
+                except ValueError:
+                    pass
+            right_addr = _normalize(compare.get("other"))
+            left_text = str(compare.get("value") or "").strip()
+            if right_addr == "R1" and left_text.startswith("#"):
+                try:
+                    found.add(int(left_text[1:]))
+                except ValueError:
+                    pass
+    for key in ("all", "any"):
+        children = condition.get(key)
+        if isinstance(children, list):
+            for child in children:
+                _walk_m_compare(child, found)
+
+
+def _mcode_decode_issues(container: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every R1 M-code compare must be gated by S029 in the same network."""
+
+    issues: list[dict[str, Any]] = []
+    for program, networks in _network_groups(container):
+        if not isinstance(networks, list):
+            continue
+        for index, network in enumerate(networks, start=1):
+            if not isinstance(network, dict):
+                continue
+            condition = network.get("condition")
+            codes: set[int] = set()
+            _walk_m_compare(condition, codes)
+            if not codes:
+                continue
+            found: set[str] = set()
+            _walk_condition(condition, found)
+            if "S29" in found:
+                continue
+            formatted = ", ".join(f"M{code:02d}" for code in sorted(codes))
+            issues.append(
+                _issue(
+                    "mcode_decode_without_s029",
+                    "warning",
+                    f"网络解码 {formatted} 时没有串 S029（M 码读取旗标）。"
+                    "R1 只在 S029 有效时代表当前 M 码；只比较 R1 会在"
+                    "其他 M 码或旧值上误动作。画面上确认是否另有一层"
+                    "总允许，否则把 S029 串进解码条件",
+                    program=program,
+                    networks=[f"N{index:04d}"],
+                )
+            )
+    return issues
+
+
+def _mcode_issues(
+    container: dict[str, Any],
+    usage: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    issues = _mcode_decode_issues(container)
+    wait_found: set[int] = set()
+    for _program, networks in _network_groups(container):
+        if not isinstance(networks, list):
+            continue
+        for network in networks:
+            if isinstance(network, dict):
+                _walk_m_compare(network.get("condition"), wait_found)
+    wait_found &= WAIT_M_CODES
+    if not wait_found:
+        return issues
+    if usage.get("C38", {}).get("writes", 0) > 0:
+        return issues
+    codes = ", ".join(f"M{code:02d}" for code in sorted(wait_found))
+    issues.append(
+        _issue(
+            "mcode_wait_without_c38",
+            "warning",
+            f"plan 解碼了等待型 M 码 {codes}，但没有任何 C38 写入。等待型 "
+            "M 码必须在执行期间把 C38 拉低，完成条件满足后再恢复 ON；"
+            "否则 CNC 会一直停在当前单节。非等待型 M 码（如冷却水）"
+            "才不需要处理 C38",
+            program=None,
+            networks=[],
+        )
+    )
     return issues
 
 
@@ -645,6 +1153,35 @@ def _resource_issues(
                 )
             )
 
+    declared_bits: dict[int, list[str]] = {}
+    for address in declared:
+        parsed = parse_register(address)
+        if parsed is None:
+            continue
+        index, bit = parsed
+        if bit is not None:
+            declared_bits.setdefault(index, []).append(address)
+
+    for address, entry in usage.items():
+        parsed = parse_register(address)
+        if parsed is None or entry["writes"] <= 0:
+            continue
+        index, bit = parsed
+        if bit is not None or index not in declared_bits:
+            continue
+        issues.append(
+            _issue(
+                "register_bitwise_overwrite",
+                "warning",
+                f"{address} 被整字写入 {entry['writes']} 次，但同一计划还"
+                f"登记了位地址 {', '.join(sorted(declared_bits[index]))}。"
+                "整字 MOV/ADD/SUB 会覆盖同一位域；先做位级占用扫描，"
+                "确认这些位是否由按键旗标、宏或别的功能占用",
+                program=entry["programs"][0] if entry["programs"] else None,
+                networks=entry["networks"],
+            )
+        )
+
     checked_bit: set[str] = set()
     for address, entry in usage.items():
         parsed = parse_register(address)
@@ -743,6 +1280,8 @@ def lint_plan(
     programs = plan.get("programs")
     if not isinstance(programs, list):
         programs = []
+
+    issues.extend(_program_title_issues(programs))
 
     for program in programs:
         if not isinstance(program, dict):
@@ -872,6 +1411,8 @@ def lint_plan(
 
     usage = plan_usage(plan)
     issues.extend(_axis_issues(plan))
+    issues.extend(_axis_usage_issues(plan))
+    issues.extend(_mcode_issues(plan, usage))
     issues.extend(_resource_issues(plan, usage))
 
     counts = {"error": 0, "warning": 0, "info": 0}

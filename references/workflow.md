@@ -14,6 +14,8 @@
 - 元件语法：`panming/element-grammar.md`
 - 常用回路：`panming/patterns.md`
 - 润滑/液压/排屑/刀库/M 码：`panming/function-library.md`
+- M 码握手与等待型时序：`mcode-patterns.md`
+- 换刀状态机、单步、急停收尾、第三软限位：`tool-change-plc.md`
 - 现场约定和注释：`panming/project-conventions.md`
 - 短地址与 SDK 规范地址：`address-notation.md`
 
@@ -61,6 +63,7 @@ python .\tools\lad_parser.py .\source.lad --no-write
 {
   "schema": "syntec-lad-plan/v1",
   "encoding": "gb2312",
+  "machine": {"pr17": 2, "axis_data_unit": "blu"},
   "variables": [],
   "programs": []
 }
@@ -69,6 +72,12 @@ python .\tools\lad_parser.py .\source.lad --no-write
 `programs` 至少包含一项。`MAIN` 是主程序；普通子程序名必须为 1 到 6 位
 字母或数字。每个 network 必须包含 `actions`，可选 `condition` 和
 `comment`。
+
+子程序的 `comment` 不是长篇说明：第一行是 LadEditor 程序树标题，必须是
+`【分类】-短主题`（建议 ≤20 字，不带序号和句读）；从第二行起才写职责、
+调用条件、互锁、参数和 I/O。`LAB` 名只写 `1`、`MAG1` 这类 1~6 位 ASCII
+代号。`plan-lint` 会检查标题缺失、过长、带序号、含句读、缺分类前缀，
+以及非法 `LAB` 名。完整规则见 `references/subprogram-naming.md`。
 
 `layout` 可写在计划顶层或 network 上：
 
@@ -123,8 +132,11 @@ python .\tools\lad_parser.py .\source.lad --no-write
 `JSR` 的目标必须是已声明的普通子程序名；不调用 `MAIN` 或未声明的局部
 `LAB`。`CNTRESET` 不接受非零预置值。
 
-正式版不生成 PLC 轴动作。带 `AXMOVE`/`AXRUN`/`AXSTOP` 的计划会被拒绝；
-需要轴功能时使用 Alpha 版。
+**硬性禁止 PLC 轴动作。** 正式版不得生成、拼接、手改、patch 写入或以任何
+方式注入 `AX MOVE` / `AX RUN` / `AX STOP`，也不得绕过门禁。轴运动一旦出错
+可能导致撞机、设备损坏或人身伤害；正式版不校验轴配置、轴群状态和宏合同，
+不存在“安全使用”的路径。收到轴需求时停止写入，改用 Alpha 版并先完成专项
+安全评审。
 
 格式样例见 `examples/demo.plan.json` 和 `examples/mvp.plan.json`。其中的
 地址和预置值全部是占位示例。
@@ -267,4 +279,6 @@ $env:SYNTEC_LAD_EDITOR = 'C:\path\to\LadEditor\MLCEdit.exe'
 
 遇到这些记录时只做只读检查或逐字节保留，不要尝试重新编码。
 
-正式版不生成任何 PLC 轴记录；带轴计划会被 `axis_not_supported` 拒绝。
+**硬性禁止 PLC 轴写入。** 正式版拒绝任何轴动作计划和轴记录写入；不得通过
+手改 `.lad`、复制 Alpha 产物或绕过 `axis_not_supported` 的方式继续。轴运动
+可能导致撞机、设备损坏或人身伤害，必须改用 Alpha 版并完成现场安全评审。

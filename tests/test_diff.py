@@ -82,6 +82,24 @@ class DiffTests(unittest.TestCase):
         self.assertIn("OUT O000", text)
         self.assertIn("OUT O001", text)
 
+    def test_zero_context_shows_all_text_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            left_path = Path(tmp) / "left.lad"
+            right_path = Path(tmp) / "right.lad"
+            compile_plan(_plan([_network("O000")])).save(left_path)
+            compile_plan(_plan([_network("O001")])).save(right_path)
+            result = diff_documents(
+                LadDocument.load(left_path), LadDocument.load(right_path)
+            )
+
+        text = render_diff(result, context=0)
+        self.assertIn("Modified", text)
+        self.assertIn("OUT O000", text)
+        self.assertIn("OUT O001", text)
+        self.assertIn("changes: unchanged", text)
+        self.assertIn("modified 1", text)
+        self.assertNotIn("more entries; raise --context", text)
+
 
 if __name__ == "__main__":
     unittest.main()

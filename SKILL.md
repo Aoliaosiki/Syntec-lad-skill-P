@@ -1,6 +1,6 @@
 ---
 name: syntec-lad
-description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, R register zones with owner/permission/retain/bit-access/Pr conditions, piecewise @ global-variable to R mapping (@1~@400 is not R1~R400) and R@R indirect-addressing rules, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; also covers I/O/register resource planning with human-confirmed plan.resources, graded comment coverage, and optional Confluence cross-verification with explicit offline degradation; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
+description: Inspect, lint, generate, patch, remap, diff, and natively validate native Syntec MLCEdit/LadEditor .lad ladder files using deterministic JSON plans and hash-pinned changes; cross-check a delivery against paramext.pxt, ParamExt_CHS/CHT/COM.xml, AlarmPLC_*.xml and an IO point table, and auto-discover MB/SB/package backup layouts. Includes an engineering knowledge library for SYNTEC PLC ladder design, including 8 element classes, C/S/R address map, R register zones with owner/permission/retain/bit-access/Pr conditions, piecewise @ global-variable to R mapping (@1~@400 is not R1~R400) and R@R indirect-addressing rules, 602-address index, 12 process patterns, lubrication/hydraulic/chip-conveyor/tool-magazine/M-code function library, PLC tool-change state-machine and third-soft-limit review, field conventions, comment encoding, and anti-patterns. Use for 新代/SYNTEC PLC 梯形图, .lad, MB/SB 备份, ladder, I/O 点位表, 参数表核对, 报警文案核对, 润滑/液压/排屑/刀库/M 码/报警/互锁 work; also covers I/O/register resource planning with human-confirmed plan.resources, graded comment coverage, and optional Confluence cross-verification with explicit offline degradation; do not use for .il/PDF/screenshot conversion, GUI click automation, or CNC upload.
 metadata:
   short-description: Edit, validate, and design Syntec .lad ladder logic safely
 ---
@@ -20,6 +20,15 @@ This skill combines two layers:
 The tool layer owns bytes. The knowledge layer helps choose a safe structure.
 Neither layer may invent an I/O point, register, timer, counter, preset, or
 interlock relationship.
+
+## Edition
+
+This is the public edition (`0.3.9p`). PLC-axis generation (`AX MOVE` /
+`AX RUN` / `AX STOP`) is hard-prohibited here; the Alpha-only instructions were
+removed at build time.
+
+Check the installed edition with `python -m syntec_lad.cli --version`. Never
+mix the two editions' rules within one answer.
 
 ## What it can do
 
@@ -123,6 +132,10 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
      `references/panming/function-library.md`
    - Real-machine layout and naming conventions: `references/panming/project-conventions.md`
    - R512~R1023 permissions: `references/panming/R512-R1023-权限表.md`
+   - M-code `S29/R1/C38` handshake and wait/non-wait patterns:
+     `references/mcode-patterns.md`
+   - PLC tool change, single-step, emergency-stop cleanup, and third soft
+     limit: `references/tool-change-plc.md`
 
    Use `references/knowledge-map.md` to choose the smallest relevant file.
 
@@ -186,6 +199,16 @@ The MCP adapter exposes `inspect_lad`, `lookup_address`, `build_plan`,
    - `syntec-lad-change/v1` takes the same `resources` array. `plan-lint`
      accepts change documents and checks only the resource rules, and `patch`
      refuses to run when that gate fails (`--allow-unverified` overrides).
+   - Subprogram names are identifiers, not descriptions: `name` must be 1~6
+     ASCII letters/digits (`1`, `MAG1`). The first line of `comment` is the
+     tree title and must be `【分类】-短主题` (for example
+     `【刀库】-伺服刀库`, at most 20 characters). Put responsibilities, call
+     conditions, interlocks, parameters, and I/O lists on the following lines
+     or in the program-body header. `plan-lint` reports
+     `program_name_invalid`, `program_title_missing`,
+     `program_title_too_long`, `program_title_numbered`,
+     `program_title_sentence`, and `program_title_without_category`.
+     See `references/subprogram-naming.md`.
    - Leave `layout` at `auto` unless the user asks for the old expanded form.
      `auto` lays out the original `all`/`any` tree directly: `all` places its
      children in series and top-aligned, while every `any` gets a vertical bus
@@ -314,6 +337,17 @@ They are not this SDK's JSON schema. Translate the circuit structure into
 - Use `A` for internal flags, `C` for CNC commands, `S` for read-only status,
   and `R` for numeric data. Do not use `R50.x` as a substitute for `A`.
 - Do not write parameters into `R81`~`R100`; change `3401`~`3420` instead.
+- M codes are not a bare `CMPE R1` coil. Decode only while `S029` is ON;
+  `R1` is the M number. Non-wait M codes leave `C38` ON; wait M codes must
+  pull `C38` low during execution and restore it only after the real
+  completion condition. If that M code ever needs to wait for a G-code move
+  anywhere in the part program, gate its decode with `S030`; M05/M19 are the
+  common examples. The official MSD uses `A50` ready / `A51` executing /
+  `A70` no-wait; a verified machine branch may use different addresses.
+  Preserve the original `C38` branch byte-for-byte and only change the action
+  and completion condition for new M/T codes. The `A050/A051/A052/A101/A188`
+  combination seen in one case is not a universal Syntec template. See
+  `references/mcode-patterns.md`.
 - Comments must use the editor-compatible cp950/Big5 traditional form. Write
   three layers: element comment, function-section comment, and program header.
 - Do not hand-build `.lad` bytes when the SDK is unavailable. Install the
@@ -328,8 +362,12 @@ Use `references/panming/comment-encoding.md` and
 
 - Element comments are short labels.
 - Function-section comments explain input, output, parameter, and purpose.
-- The program header records title, revision history, parameters, I/O quick
-  reference, and cautions.
+- A subprogram `comment` starts with a short tree title
+  (`【分类】-短主题`, ≤20 characters, no sentence punctuation, no number).
+  Revision history, parameters, I/O quick reference, interlocks, and cautions
+  go on the following comment lines or in the program-body header, never in
+  the title line. Never put Chinese or a sentence into the LAB `name`.
+  Use `references/subprogram-naming.md`.
 - Simplified Chinese may display as question marks or corrupt text. Convert to
   traditional Chinese before writing native comments.
 
@@ -444,6 +482,7 @@ question marks under cp950.
 | Contact/coil/timer/counter/compare/flow grammar | `references/panming/element-grammar.md` |
 | 12 reusable circuits | `references/panming/patterns.md` |
 | Lubrication/hydraulic/chip/coolant/tool magazine/M code | `references/panming/function-library.md` |
+| PLC tool change, single-step, emergency-stop cleanup, third soft limit | `references/tool-change-plc.md` |
 | Field conventions and program skeleton | `references/panming/project-conventions.md` |
 | Comment encoding | `references/panming/comment-encoding.md` |
 | Compact binary layout | `references/panming/lad-format.md` |
@@ -487,6 +526,9 @@ Syntec manual.
   remapping, and delivery checks.
 - `references/knowledge-map.md` for routing and source hierarchy.
 - `references/address-notation.md` for short/canonical address conversion.
+- `references/tool-change-plc.md` for case-based tool-change review: C38
+  preservation, state-machine rules, single-step, timers, emergency-stop
+  cleanup, and third soft limit.
 - `syntec_lad/schema/lad-plan.schema.json` and
   `syntec_lad/schema/lad-change.schema.json` for exact JSON fields.
 - `examples/demo.plan.json` and `examples/mvp.plan.json` as format fixtures,

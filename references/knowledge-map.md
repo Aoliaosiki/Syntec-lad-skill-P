@@ -20,6 +20,8 @@ entire knowledge base for a simple record inspection.
 | Write a contact, coil, timer, counter, compare, or flow block | `panming/element-grammar.md` |
 | Design a common circuit | `panming/patterns.md` |
 | Implement lubrication, hydraulic, chip conveyor, coolant, tool magazine, or M code | `panming/function-library.md` |
+| Write an M-code decode, wait/non-wait output, or `C38` handshake | `mcode-patterns.md` |
+| Review a PLC tool-change state machine, single-step, emergency-stop cleanup, or third soft limit | `tool-change-plc.md` |
 | Follow real-machine layout and naming conventions | `panming/project-conventions.md` |
 | Encode or check Chinese comments | `panming/comment-encoding.md` |
 | Inspect raw record layout | `panming/lad-format.md` |
@@ -28,6 +30,7 @@ entire knowledge base for a simple record inspection.
 | Modify an existing file safely | `workflow.md` |
 | Plan I/O, A, and R allocation without guessing | `resource-planning.md` |
 | Decide which elements need comments | `comment-policy.md` |
+| Name a subprogram and write its tree title or note | `subprogram-naming.md` |
 | Verify against Confluence, or degrade when offline | `confluence-verification.md` |
 
 

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "syntec-lad"
-# 正式版 0.3.8p；PEP 440 打包元数据用 0.3.8
-version = "0.3.8"
+# 正式版 0.3.9p；PEP 440 打包元数据用 0.3.9
+version = "0.3.9"
 description = "Deterministic SDK, engineering knowledge base, and Codex skill for Syntec LadEditor .lad files"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -85,6 +85,7 @@ python scripts/run_syntec_lad.py resources cnc.lad --format csv --output 现状.
 | `r_retain_mismatch` | error / warning | `retain` 标记与 R 分区不一致 |
 | `r_system_write` | warning | 写逐条定义的系统接口区，且不在已知可写例外内 |
 | `r_conditional_zone` | warning | 用条件占用区但没在 note 写明 Pr 条件 |
+| `register_bitwise_overwrite` | warning | 整字写 `Rn`，但同一计划登记了 `Rn.yy` 位地址；整写会覆盖这些位 |
 | `resource_missing` | warning | 用了 `I/O/C/S` 或 `R0~R255` 却没登记 |
 | `resource_unused` | info | 登记了但没用到 |
 
@@ -130,6 +131,8 @@ python scripts/run_syntec_lad.py resources cnc.lad --format csv --output 现状.
 - 需要跨断电记住的数值，用保持区；不要用 `R50~R80`；
 - 不要因为「看着空」就复用 `R103~R192`，那是刀号区；
 - `R640` 以上不能位存取；
+- 整字写 `Rn` 前先扫同号的 `Rn.yy` 位占用；按键旗标、宏交换和状态位
+  经常只占一位，整写会把它们一起清掉；
 - `R512~R1023` 是逐条权限，不能整片判只读。
 
 ### 3.4 `C` / `S`

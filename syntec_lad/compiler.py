@@ -300,8 +300,11 @@ def _parse_action(action: Any) -> Action:
     if op in ("AXMOVE", "AXRUN", "AXSTOP"):
         if not AXIS_GENERATION:
             raise LadValidationError(
-                f"{op} is an Alpha-edition action; this edition rejects PLC-axis "
-                "generation. Use the Alpha edition."
+                f"{op} is HARD-DISABLED in the public edition. PLC-axis motion "
+                "can cause machine collision, equipment damage, or personal "
+                "injury; the public edition has no axis safety validation. Do "
+                "not bypass this gate or hand-assemble axis records. Stop and "
+                "use the Alpha edition after a dedicated safety review."
             )
         axis = parse_axis(str(action.get("axis", "")))
         if op == "AXSTOP":

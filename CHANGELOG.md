@@ -1,6 +1,54 @@
 # Changelog
 
 
+## 0.3.9p - 2026-11-26
+
+### Added
+
+- `references/mcode-patterns.md`：沉淀 `S029/R1/C038` 标准 M 码链路、
+  等待/非等待分类、`C38` 常态 ON 与等待期间拉低的布尔式、`S030` 使用条件、
+  M08/M09 与 M50/M51 真实样本拆解，以及超时/急停/复位检查表。
+- `plan-lint` 新增 `mcode_wait_without_c38`：解码了等待型 M 码却没有任何
+  `C38` 写入时，在生成前报警，避免 CNC 卡在当前单节。
+- `plan-lint` 新增 `mcode_decode_without_s029`：比较 `R1` 解码 M 码但同
+  网络没有 `S029` 时报警，提醒补读取旗标或人工确认总允许层。
+- `references/tool-change-plc.md`：新增 PLC 换刀案例评审参考，记录状态机、
+  模式/暂停/复位、单步、计时器、点位、互锁、急停收尾和第三软限位的检查
+  方法；单机地址只作为结构示例。
+- `plan-lint` 新增 `register_bitwise_overwrite`：同一计划里整字写 `Rn`、
+  又登记了 `Rn.yy` 位地址时报警，提醒先做位级占用扫描。
+- `references/subprogram-naming.md`：规定子程序 `LAB` 名、程序树标题和批注
+  的分层写法，并记录两份真实机台备份的命名证据。
+- `plan-lint` 新增子程序命名检查：`program_name_invalid`（error）、
+  `program_title_missing`、`program_title_too_long`、
+  `program_title_numbered`、`program_title_sentence`、
+  `program_title_without_category`（warning）。
+- `tests/test_plan_lint.py` 增加标题通过、多行批注、缺标题、长句、序号和
+  非法 `LAB` 名的用例。
+
+### Fixed
+
+- M 码文档按官方 MSD 修正为 `A50` 就绪 / `A51` 执行 / `A70` 非等待直通；
+  明确 `A050/A051/A052/A101/A188` 是单机案例结构，不是所有新代 PLC 的
+  通用 C38 模板。原机 C38 支路必须逐字节保留。
+- 换刀案例中的模式/暂停、单步共享、计时器复归、点位写死、急停恢复
+  软限位等经验已抽象成通用检查项；`R58.0`、`C083` 客户支路只作为案例。
+
+### Changed
+
+- M 码入口统一指向 `references/mcode-patterns.md`；上游
+  `references/panming/function-library.md` §5 保留原文并加编者按，避免旧的
+  “C38 只在完成瞬间给”表述被误用。
+- `SKILL.md`、`README.md`、`references/comment-policy.md` 和
+  `references/workflow.md` 明确：`comment` 第一行是程序树短标题，详细说明
+  放到后续行或程序体头部，不再把整句职责写进标题。
+- `syntec_lad/schema/lad-plan.schema.json` 为 `program.comment` 增加字段
+  说明，编辑器提示与文档保持一致。
+
+### Verified
+
+- 公共版投影：`195` 项通过，`20` 项跳过；轴参考文档和轴测试未进入公共产物。
+
 ## 0.3.8p - 2026-11-25
 
 ### Added
@@ -34,8 +82,11 @@
 - `@` 映射到 R 后的可写范围按手册收紧为
   `R50~R80`、`R101~R511`、`R1024~R4095`、`R5800~R7999`、
   `R10000~R10999`、`R15000~R65535`。
-- 正式版 `0.3.8p` 不生成 PLC 轴；带轴计划报 `axis_not_supported`，不再
-  静默接受。
+- 正式版 `0.3.8p` 的构建门禁关闭 PLC 轴生成；带轴的完整 plan 报
+  `axis_not_supported`，不再静默接受。这是 `build-public.ps1` 的版本开关，
+  不是 `syntec-lad-change/v1` 新支持了轴：change 的 `network` 仍是自由结构，
+  其中若出现 AX 动作，正式版 `plan-lint`/`patch` 也会以 `axis_not_supported`
+  拒绝。只有 Alpha 的 plan schema 定义了 AX 分支，正式版构建会裁掉该分支。
 
 ### Verified
 

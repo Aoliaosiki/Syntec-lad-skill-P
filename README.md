@@ -1,6 +1,6 @@
-# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.8p）
+# Syntec Ladder SDK / Codex Skill + 工程知识库（0.3.9p）
 
-[![Version](https://img.shields.io/badge/version-0.3.8p-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.9p-blue)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-green)](pyproject.toml)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](README.md)
 
@@ -12,16 +12,17 @@
 - 调用原厂 32 位 `LadDLL.dll` 做原生语法校验。
 - 内置新代 PLC 工程知识库：8 类元件、C/S/R 地址表、R 分区与权限/保持/
   位存取、`@` 公用变量到 R 的分段映射与 `R@R` 间接寻址、602 条地址索引、12 个工艺模式，
-  以及润滑/液压/排屑/刀库/M 码写法库。
+  以及润滑/液压/排屑/刀库写法库、`S29/R1/C38` 标准 M 码握手和 PLC 换刀
+  状态机/单步/急停收尾/第三软限位评审。
 
 > **本仓库是 [`LipsLee/syntec-lad-skill`](https://github.com/LipsLee/syntec-lad-skill) v0.2.2 的优化版。**
-> 当前版本：`0.3.8p`（正式版），仓库：
+> 当前版本：`0.3.9p`（正式版），仓库：
 > [`Aoliaosiki/Syntec-lad-skill-P`](https://github.com/Aoliaosiki/Syntec-lad-skill-P)。
 > 本工具不会点击 LadEditor 界面，不会上传 CNC，也不会直接修改控制器。
 
 ## 目录
 
-- [0.3.8p 重点](#038p-重点)
+- [0.3.9p 重点](#039p-重点)
 - [0.3.7p 重点](#037p-重点)
 - [0.3.6p 重点](#036p-重点)
 - [功能总览](#功能总览)
@@ -41,7 +42,7 @@
 - [目录结构](#目录结构)
 - [版本与授权](#版本与授权)
 
-## 0.3.8p 重点
+## 0.3.9p 重点
 
 ### R 分区：先判断数据性质，再选区
 
@@ -66,13 +67,73 @@ python $LadCli lookup @108001
 
 `resources` 现在会按 R 分区汇总占用；`plan-lint` 新增
 `r_system_write`、`r_bit_access_invalid`、`r_retain_mismatch`、
-`r_conditional_zone`。完整决策表见 `references/register-map.md`。
+`r_conditional_zone`，以及整字写 `Rn` 又登记 `Rn.yy` 时的
+`register_bitwise_overwrite`。完整决策表见 `references/register-map.md`。
+
+### M 码：S29 读入、R1 取号、C38 放行
+
+M 码不是只写一条 `CMPE #50 R1 -> OUT A150`。标准链路是：
+
+- `S029` 为 ON 时才解码 M 码，M 号从 `R1` 读取；
+- 每个 M 码一个独立请求位，不要把所有 M 码塞进一个大 rung；
+- `C038` 是 M/S/T 完成信号，**常态 ON**；
+- 等待型 M 码（M03/M04/M05/M19/M50/M51 等）执行期间必须把 `C38` 拉低，
+  实际完成条件满足后再恢复 ON；
+- 非等待型 M 码（M07/M08/M09 等）不处理 `C38`，但仍要有急停、复位和互锁；
+- 只要该 M 码在加工档的任何位置需要等待 G 码完成，解码条件就要串
+  `S030`（分布结束）；M05/M19 是最常见的例子，不能因单独执行时没有 G 码
+  就省略。
+- 官方 MSD 最小模型是 `A50` 就绪 / `A51` 执行 / `A70` 非等待直通。
+  现场骨架可能是 `A050/A051/A070` 或别的组合；原机已经验证的 `C38`
+  支路要逐字节保留，新 M/T 码只改动作和完成条件。某案例出现的
+  `A050/A051/A052/A101/A188` 不是所有新代 PLC 的通用模板。
+
+`plan-lint` 会对等待型 M 码没有任何 `C38` 写入的计划报
+`mcode_wait_without_c38`，对比较 `R1` 但同网络没有 `S029` 的计划报
+`mcode_decode_without_s029`。完整时序、`C38` 布尔式、真实样本和检查表见
+`references/mcode-patterns.md`。
+
+### PLC 换刀：状态机比模板重要
+
+新增 `references/tool-change-plc.md`，把换刀改造按“官方规则 / 官方示例 /
+现场骨架 / 单机结构”分级。重点检查：
+
+- 模式位只做起动前条件，不串进每一步推进；暂停信号不是步骤许可；
+- 单步每个机械动作独立步号，一次按键只放行一段；
+- `TIM` 显式写单位，到位后复归，单步等人时不计时；
+- 点位从 HMI/参数读，不写死常数；换机必须重算单位与范围；
+- 急停要停轴、清状态、恢复被流程关闭的输出/第三软限位，不得自动续走；
+- 官方第三软限位是 `C83/R638`，第一软限位 `Pr2401~Pr2440` 没有 C bit；
+- 某案例的 `R58.0` 关软限位只是单机映射，不能当通用地址。
+
+### 子程序命名：短标题、长批注
+
+新增 `references/subprogram-naming.md`。`LAB` 名只表达功能和侧别，程序树
+第一行是 2~8 字短标题（如 `【刀库】-刀盘转位`），详细职责、调用条件、
+互锁和参数放到后续批注行。`plan-lint` 新增
+`program_name_invalid`（error）、`program_title_missing`、
+`program_title_too_long`、`program_title_numbered`、
+`program_title_sentence`、`program_title_without_category`，避免把整句
+职责写进程序树。
 
 ### 八类元件 smoke 验证
 
 新增 `tests/test_elements.py`：同一份计划生成 `I/O/A/C/S/R/TM/CT` 八类元件。
 Python 回读 0 issue，原厂 `LadDLL.SyntaxCheck` 通过。该测试只证明格式/编辑器
 兼容，不代表真机动作安全。
+
+
+### 0.3.8p 修复汇总
+
+- 修正 `@` 公用变量到 R 的分段映射：`@1~@400`、`@656~@999`、
+  `@1001~@1999`、`@60000~@79999` 不对应 R，不能把 `@100` 当成 `R100`。
+- 只有 `@401~@655`、`@10000~@14095`、`@100000~@165535` 映射 R；公式分别为
+  `R = @ - 400`、`R = @ - 10000`、`R = @ - 100000`。
+- 修正 `@` 映射后的可写范围：`R50~R80`、`R101~R511`、`R1024~R4095`、
+  `R5800~R7999`、`R10000~R10999`、`R15000~R65535`。
+- 补齐 `R0~R65535` 分区表，`lookup`、`resources`、`plan-lint` 会同时给出
+  归属、权限、保持、位存取和条件 Pr。
+- 区分阶梯 `R@R` 间接寻址、宏/HMI `@` 公用变量和 `#` 宏变量，避免混用。
 
 ## 0.3.7p 重点
 
@@ -458,11 +519,13 @@ python $LadCli validate .\file.lad --dll "C:\path\to\LadDLL.dll"
 ```powershell
 python $LadCli diff .\before.lad .\after.lad
 python $LadCli diff .\before.lad .\after.lad --context 20
+python $LadCli diff .\before.lad .\after.lad --context 0
 python $LadCli diff .\before.lad .\after.lad --json
 ```
 
 按注释块 / 网络 / 结构记录做段对齐，输出未变、修改、新增、删除、移动五类
-结果。修改项会给出操作数级差异，例如：
+结果。默认只显示前 8 条差异；`--context N` 显示前 N 条，`--context 0`
+显示全部差异。修改项会给出操作数级差异，例如：
 
 ```text
 OUT R0591.04 -> OUT R0590.04
@@ -511,17 +574,22 @@ python $LadCli plan-lint .\plan.json --output .\plan-lint.json
 | `mergeable_condition_too_wide` | info | 条件宽度超过共用母线起点 |
 | `mixed_action_too_wide` | info | 同一网络混用 1/2 格动作且条件过宽 |
 | `flow_action_not_mergeable` | info | 流程动作不能与其它动作共用母线 |
+| `program_name_invalid` | error | 子程序 `LAB` 名不是 1~6 位 ASCII 字母/数字 |
+| `program_title_missing` / `program_title_too_long` / `program_title_numbered` / `program_title_sentence` / `program_title_without_category` | warning | 程序树标题缺少、超长、带序号、含句读或没有分类前缀 |
+| `mcode_wait_without_c38` | warning | 解码了等待型 M 码，但计划里没有任何 `C38` 写入 |
+| `mcode_decode_without_s029` | warning | 比较 `R1` 解码 M 码，但同网络没有 `S029` |
 | `resource_unverified` | error | `plan.resources` 里还有 `source=suggested` |
 | `resource_source_invalid` | error | `source` 不在 `io-table/user/scan/suggested` 内 |
 | `resource_duplicate` | error | 同一地址登记两次 |
 | `resource_readonly_write` | error | 写了 `R81~R100`、`R8000~R8255`、`I` 或 `S` |
+| `register_bitwise_overwrite` | warning | 整字写 `Rn`，但同一计划登记了 `Rn.yy` 位地址 |
 | `resource_missing` | warning | 用了 I/O/C/S 或 `R0~R255` 却没登记 |
 | `resource_unused` | info | 登记了但没有任何网络使用 |
 
 
+
 `plan-lint` 也接受 `syntec-lad-change/v1`：这时跑资源规则，按
-`operations[].networks` 统计地址，输出里标
-`Change: N operation(s)`。
+`operations[].networks` 统计地址，输出里标 `Change: N operation(s)`。
 
 ### `resources`
 
@@ -726,9 +794,49 @@ python $LadCli open .\file.lad --wait
 
 ### 程序字段
 
-- `name`：`MAIN` 或 1 到 6 位字母/数字的普通子程序名。
-- `comment`：程序头注释，最长 255 字符。
+- `name`：`MAIN` 或 1 到 6 位 ASCII 字母/数字的普通子程序名
+  （如 `1`、`MAG1`）。中文和描述不能写进 `name`。
+- `comment`：程序注释，最长 255 字符。子程序的第一行是 LadEditor 程序树
+  标题，必须是 `【分类】-短主题`（建议 ≤20 字）；从第二行起写职责、调用
+  条件、互锁、参数和 I/O 速查。
 - `networks`：网络数组。
+
+#### 子程序命名
+
+LadEditor 程序树显示的是 `comment` 第一行，后面的 `(1)`、`(9)` 才是
+`LAB` 名。标题写成一整句会把同级的其它程序挤出视野，所以按下面分层：
+
+```json
+{
+  "name": "9",
+  "comment": "【刀库】-伺服刀库\n职责：刀盘旋转、刀套翻转与换刀完成确认\n调用：M06 且主轴停止、刀库门关闭\n互锁：急停、刀库未原点、气压不足时禁止启动\n参数：R120~R139 刀号与刀套映射",
+  "networks": []
+}
+```
+
+规则：
+
+- `LAB` 名 1~6 位 ASCII 字母/数字，推荐沿用现场编号 `1`、`2` …，或短代号
+  `MAG1`、`LUB1`。
+- 第一行统一 `【分类】-短主题`，分类可用 `【外部端子】`、`【面板功能】`、
+  `【系统功能】`、`【刀库】`、`【报警】`、`【M码】`、`【润滑】`、`【液压】`、
+  `【排屑】`、`【主轴】`、`【冷却】`、`【安全】`。
+- 第一行不写 `(1)`、`1.` 这类序号，不写 `，。；！？、`，不写日期和版本。
+- 详细说明从第二行开始；如果现场不使用多行程序注释，就放到程序体第一条
+  `type-1` 注释，标题行仍保持短句。
+
+`plan-lint` 会检查：
+
+| 规则 | 级别 | 触发条件 |
+| --- | --- | --- |
+| `program_name_invalid` | error | `LAB` 名不是 1~6 位 ASCII 字母/数字 |
+| `program_title_missing` | warning | 子程序没有 `comment` |
+| `program_title_too_long` | warning | 标题第一行超过 20 字 |
+| `program_title_numbered` | warning | 标题以 `(1)`、`1.`、`一、` 开头，或以 `(9)` 结尾 |
+| `program_title_sentence` | warning | 标题含 `，。；！？、` |
+| `program_title_without_category` | warning | 标题没有 `【分类】-` 前缀 |
+
+完整规则、现场样本和反模式见 `references/subprogram-naming.md`。
 
 `JMP` / `JSR` 的目标必须是已声明的普通子程序，不能调用 `MAIN` 或未声明
 的局部 `LAB`。
@@ -779,7 +887,6 @@ python $LadCli open .\file.lad --wait
 {"op": "JSR", "target": "SUB1"}
 {"op": "MSG", "target": "ALM001"}
 ```
-
 
 
 ### 同条件多动作
@@ -1043,8 +1150,11 @@ python .\scripts\run_syntec_lad.py inspect .\source.lad
 | 触点/线圈/定时/计数/比较/流程语法 | `references/panming/element-grammar.md` |
 | 12 个常用回路 | `references/panming/patterns.md` |
 | 润滑/液压/排屑/刀库/M 码 | `references/panming/function-library.md` |
+| M 码 `S29/R1/C38`、等待型握手与超时 | `references/mcode-patterns.md` |
+| PLC 换刀状态机、单步、急停收尾、第三软限位 | `references/tool-change-plc.md` |
 | 现场约定和程序骨架 | `references/panming/project-conventions.md` |
 | 注释编码 | `references/panming/comment-encoding.md` |
+| 子程序命名、树标题与批注分层 | `references/subprogram-naming.md` |
 | 紧凑二进制布局 | `references/panming/lad-format.md` |
 | R512~R1023 权限 | `references/panming/R512-R1023-权限表.md` |
 | 完整操作码/格式附录 | `references/panming/TECHNICAL.md` |
@@ -1198,6 +1308,7 @@ references/delivery-layout.md  MB/SB/package 固定目录结构
 references/resource-planning.md 资源盘点与人工确认流程
 references/comment-policy.md    注释分级规范
 references/confluence-verification.md 云端二次验证与降级
+references/mcode-patterns.md     M 码 S29/R1/C38 标准写法
 references/snapshots/          Confluence 离线快照
 references/panming/            上游 MIT 知识快照
 examples/                      格式示例与回归夹具
@@ -1214,4 +1325,4 @@ downloads/                     版本分发包与 SHA256
 - 本工具仅用于对自有或已获授权设备的离线梯形图分析与生成；不点击编辑器
   界面、不上传 CNC、不修改控制器。
 
-当前版本：`0.3.8p`。完整变更见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本：`0.3.9p`。完整变更见 [CHANGELOG.md](CHANGELOG.md)。
